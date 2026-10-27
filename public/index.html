@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Persistent AI Agent</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b1020;--panel:#121a2c;--line:#26334b;--muted:#93a4bd;--text:#f2f5fb;--accent:#7c9cff;--user:#233b66}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#172341 0,#0b1020 48%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100dvh}
+    button,input,textarea{font:inherit}button{cursor:pointer} .shell{max-width:900px;margin:auto;min-height:100dvh;display:flex;flex-direction:column;padding:16px;gap:12px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px}.brand{font-weight:750;font-size:1.05rem;letter-spacing:.2px}.sub{font-size:.8rem;color:var(--muted)}
+    .panel{border:1px solid var(--line);background:rgba(18,26,44,.92);border-radius:18px;padding:18px;box-shadow:0 12px 40px #0002}
+    #login{max-width:420px;width:100%;margin:auto}.field{width:100%;background:#0b1222;color:var(--text);border:1px solid #34435e;border-radius:12px;padding:13px;margin:8px 0 12px}
+    .primary{background:var(--accent);color:#0b1020;font-weight:750;border:0;border-radius:12px;padding:12px 16px}.secondary{background:#1a2740;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+    #app{display:none;flex:1;min-height:0;flex-direction:column}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.status{color:var(--muted);font-size:.78rem;margin-left:auto}
+    #messages{flex:1;min-height:42vh;max-height:65vh;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:4px 2px 14px}
+    .msg{max-width:92%;padding:12px 14px;border-radius:15px;white-space:pre-wrap;overflow-wrap:anywhere}.user{align-self:flex-end;background:var(--user)}.assistant{align-self:flex-start;background:#172237;border:1px solid #2a3852}
+    .empty{margin:auto;text-align:center;color:var(--muted);padding:28px 10px}.composer{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:12px}
+    textarea{resize:vertical;min-height:48px;max-height:180px;flex:1;background:#0b1222;color:var(--text);border:1px solid #34435e;border-radius:12px;padding:12px;outline:none}
+    .hint{font-size:.78rem;color:var(--muted);padding:2px 2px 8px}.error{color:#ffb4b4;font-size:.88rem;min-height:1.2em}
+    @media(max-width:560px){.shell{padding:10px}.panel{padding:12px;border-radius:14px}#messages{max-height:none;min-height:50vh}.msg{max-width:97%}.status{width:100%;margin-left:0}.composer{position:sticky;bottom:0;background:var(--panel);padding-bottom:env(safe-area-inset-bottom)}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header><div><div class="brand">✦ Persistent AI Agent</div><div class="sub">Private chat · mobile-friendly</div></div><button id="logout" class="secondary" hidden>Sign out</button></header>
+    <section id="login" class="panel">
+      <h2 style="margin:0 0 4px">Sign in</h2><p class="sub">Enter your app password to open your AI dashboard.</p>
+      <form id="loginForm"><label for="password">App password</label><input id="password" class="field" type="password" autocomplete="current-password" required><button class="primary" style="width:100%">Continue</button></form>
+      <div id="loginError" class="error" role="status"></div>
+    </section>
+    <section id="app">
+      <div class="toolbar"><button id="newChat" class="secondary">＋ New chat</button><span id="status" class="status">Checking configuration…</span></div>
+      <div id="messages" class="panel" aria-live="polite"><div class="empty">Start a conversation with Claude.</div></div>
+      <form id="chatForm" class="composer"><textarea id="message" rows="1" maxlength="12000" placeholder="Message Claude…" aria-label="Message" required></textarea><button id="send" class="primary">Send</button></form>
+      <div class="hint">Do not send passwords, API keys, or other sensitive secrets in chat.</div>
+      <div id="chatError" class="error" role="status"></div>
+    </section>
+  </main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let sessionId = crypto.randomUUID();
+  let busy = false;
+  const setBusy = value => { busy = value; $("send").disabled = value; $("send").textContent = value ? "…" : "Send"; };
+  const addMessage = (role, content) => {
+    const empty = $("messages").querySelector(".empty"); if (empty) empty.remove();
+    const el = document.createElement("div"); el.className = "msg " + role; el.textContent = content; $("messages").appendChild(el); $("messages").scrollTop = $("messages").scrollHeight; return el;
+  };
+  const showApp = () => { $("login").style.display = "none"; $("app").style.display = "flex"; $("logout").hidden = false; };
+  async function api(url, options={}) {
+    const response = await fetch(url, { ...options, headers: { "content-type":"application/json", ...(options.headers||{}) } });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  }
+  async function checkStatus() {
+    const s = await api("/api/status");
+    $("status").textContent = !s.configuration.password ? "Set APP_PASSWORD" : !s.configuration.sessionSecret ? "Set SESSION_SECRET" : !s.configuration.aiKey ? "AI key missing" : !s.persistenceConfigured ? "History not persistent — configure Supabase" : "Ready · Supabase history on";
+  }
+  $("loginForm").addEventListener("submit", async e => {
+    e.preventDefault(); $("loginError").textContent = "";
+    try { await api("/api/login", {method:"POST",body:JSON.stringify({password:$("password").value})}); $("password").value=""; showApp(); await checkStatus(); }
+    catch(err) { $("loginError").textContent = err.message; }
+  });
+  $("logout").addEventListener("click", async () => { await api("/api/logout",{method:"POST"}).catch(()=>{}); $("app").style.display="none"; $("login").style.display="block"; $("logout").hidden=true; $("messages").innerHTML='<div class="empty">Sign in to start a conversation.</div>'; });
+  $("newChat").addEventListener("click", () => { sessionId=crypto.randomUUID(); $("messages").innerHTML='<div class="empty">Start a new conversation with Claude.</div>'; $("chatError").textContent=""; });
+  $("chatForm").addEventListener("submit", async e => {
+    e.preventDefault(); if (busy) return;
+    const content=$("message").value.trim(); if(!content) return;
+    $("message").value=""; $("chatError").textContent=""; addMessage("user",content); setBusy(true);
+    const pending=addMessage("assistant","Thinking…");
+    try { const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:content})}); pending.textContent=data.answer; if(data.persistence!=="supabase") $("status").textContent="Warning: history is memory-only"; }
+    catch(err) { pending.textContent=""; pending.remove(); $("chatError").textContent=err.message; }
+    finally { setBusy(false); $("message").focus(); }
+  });
+  $("message").addEventListener("keydown", e => { if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("chatForm").requestSubmit();} });
+  checkStatus().catch(()=>{ $("status").textContent="Configuration check unavailable"; });
+})();
+</script>
+</body>
+</html>
