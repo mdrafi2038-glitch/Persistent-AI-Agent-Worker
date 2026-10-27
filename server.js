@@ -201,7 +201,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
   }
 });
 
-app.get("*", (req, res, next) => {
+app.get(/.*/, (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
   res.sendFile(require("node:path").join(process.cwd(), "public", "index.html"));
 });
