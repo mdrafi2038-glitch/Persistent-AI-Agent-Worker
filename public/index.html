@@ -69,6 +69,33 @@ body{background:var(--bg);color:var(--text)}
  .hint{padding:8px 8px 0}
  .side-bottom{display:block}
 }
+
+/* Refined ChatGPT-style message composer */
+.composer-area{width:100%;max-width:100%;margin:0 auto;padding:12px 0 max(18px,env(safe-area-inset-bottom));}
+.composer-box{width:100%;background:#303030;border:1px solid #414141;border-radius:30px;padding:9px 12px;box-shadow:0 1px 2px #0003;transition:border-color .15s ease,background .15s ease;}
+.composer-box:focus-within{border-color:#5a5a5a;background:#303030}
+.attachment-strip{padding:2px 4px 9px;gap:9px}
+.composer-row{display:flex;align-items:center;gap:9px;min-height:42px}
+.attach-btn{width:38px;height:38px;flex:0 0 38px;background:transparent;color:#e6e6e6;border:0;border-radius:50%;font-size:1.75rem;font-weight:300;line-height:1}
+.attach-btn:hover{background:#454545}
+.composer textarea{display:block;flex:1;width:100%;min-width:0;min-height:40px;max-height:190px;resize:none;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;color:#f4f4f4;padding:9px 2px;line-height:1.5;font-size:1rem}
+.composer textarea::placeholder{color:#b4b4b4;opacity:1}
+.send-btn{width:38px;height:38px;flex:0 0 38px;border:0;border-radius:50%;display:grid;place-items:center;background:#f4f4f4;color:#171717;font-size:1.3rem;font-weight:750;line-height:1;transition:transform .12s ease,opacity .12s ease}
+.send-btn:hover:not(:disabled){transform:scale(1.04);background:#fff}
+.send-btn:disabled{opacity:.5}
+.hint{text-align:center;color:#9b9b9b;font-size:.7rem;line-height:1.4;padding:9px 12px 0}
+.error:empty{display:none}
+@media(max-width:700px){
+ .chat-wrap{padding-left:12px;padding-right:12px}
+ .composer-area{padding:8px 0 max(12px,env(safe-area-inset-bottom))}
+ .composer-box{border-radius:26px;padding:8px 10px}
+ .composer-row{gap:7px;min-height:42px}
+ .attach-btn{width:36px;height:36px;flex-basis:36px;font-size:1.65rem}
+ .send-btn{width:36px;height:36px;flex-basis:36px}
+ .composer textarea{font-size:16px;min-height:40px;padding:8px 1px}
+ .hint{font-size:.66rem;padding-top:7px}
+}
+
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}}
 </style>
 </head>
