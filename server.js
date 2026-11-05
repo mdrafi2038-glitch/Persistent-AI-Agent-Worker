@@ -26,7 +26,7 @@ const memoryMessages = new Map();
 
 app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "9mb" }));
 app.use(express.static("public", { etag: true, maxAge: "1h" }));
 
 const limiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
@@ -121,15 +121,28 @@ app.get("/api/history/:sessionId", requireAuth, async (req, res) => {
   const sessionId = String(req.params.sessionId || "");
   if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return res.status(400).json({ error: "Invalid conversation ID." });
   try {
+    let messages = [];
     if (supabase) {
       const { data, error } = await supabase.from("chat_messages").select("role,content,created_at").eq("session_id", sessionId).order("created_at", { ascending: true }).limit(200);
       if (error) throw error;
-      return res.json({ messages: data || [] });
-    }
-    return res.json({ messages: memoryMessages.get(sessionId) || [] });
+      messages = data || [];
+    } else messages = memoryMessages.get(sessionId) || [];
+    const hydrated = await Promise.all(messages.map(async item => {
+      try {
+        const parsed = JSON.parse(item.content);
+        if (!parsed || parsed.kind !== "chat_message") return item;
+        const attachments = await Promise.all((parsed.attachments || []).map(async file => {
+          if (!file.path || !supabase) return { ...file, url: null };
+          const { data } = await supabase.storage.from("chat-attachments").createSignedUrl(file.path, 3600);
+          return { ...file, url: data?.signedUrl || null };
+        }));
+        return { ...item, content: JSON.stringify({ ...parsed, attachments }) };
+      } catch { return item; }
+    }));
+    return res.json({ messages: hydrated });
   } catch (error) {
     console.error("history error:", error.message);
-    return res.status(500).json({ error: "Could not load conversation history. Check Supabase schema and environment variables." });
+    return res.status(500).json({ error: "Could not load conversation history." });
   }
 });
 
@@ -218,25 +231,73 @@ app.get("/api/models", requireAuth, async (_req, res) => {
   } catch (error) { res.status(502).json({ error: error.message || "Could not load models." }); }
 });
 
+function parseStoredMessage(item) {
+  try {
+    const value = JSON.parse(item.content);
+    if (value?.kind === "chat_message") return value;
+  } catch {}
+  return { text: item.content, attachments: [] };
+}
+
+async function providerHistory(items) {
+  return Promise.all(items.map(async item => {
+    const saved = parseStoredMessage(item);
+    const parts = [{ type: "text", text: saved.text || "" }];
+    for (const file of (saved.attachments || [])) {
+      if (file.type?.startsWith("image/") && file.path && supabase) {
+        const { data } = await supabase.storage.from("chat-attachments").createSignedUrl(file.path, 3600);
+        if (data?.signedUrl) parts.push({ type: "image_url", image_url: { url: data.signedUrl } });
+      }
+    }
+    return { role: item.role, content: parts.length === 1 ? (saved.text || "") : parts };
+  }));
+}
+
 app.post("/api/chat", requireAuth, async (req, res) => {
   const sessionId = String(req.body?.sessionId || "");
   const content = String(req.body?.message || "").trim();
+  const incoming = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
   if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return res.status(400).json({ error: "Start a new conversation first." });
-  if (!content) return res.status(400).json({ error: "Message cannot be empty." });
+  if (!content && !incoming.length) return res.status(400).json({ error: "Write a message or attach a file." });
   if (content.length > 12000) return res.status(413).json({ error: "Message is too long (12,000 characters max)." });
+  if (incoming.length > 4) return res.status(400).json({ error: "Attach up to 4 files at a time." });
+  if (!supabase && incoming.length) return res.status(503).json({ error: "File uploads require Supabase storage to be connected." });
   try {
+    const savedAttachments = [];
+    const imageParts = [];
+    const extractedText = [];
+    for (const file of incoming) {
+      const name = String(file.name || "attachment").replace(/[\\/\\\\]/g, "_").slice(0, 120);
+      const type = String(file.type || "application/octet-stream").toLowerCase();
+      const allowed = ["image/jpeg","image/png","image/webp","image/gif","text/plain","text/markdown","text/csv","application/json","application/pdf"];
+      if (!allowed.includes(type)) return res.status(415).json({ error: "Supported: images, PDF, TXT, MD, CSV and JSON." });
+      const match = /^data:([^;,]+);base64,([a-z0-9+/=]+)$/i.exec(String(file.data || ""));
+      if (!match || match[1].toLowerCase() !== type) return res.status(400).json({ error: "Invalid file data." });
+      const buffer = Buffer.from(match[2], "base64");
+      if (!buffer.length || buffer.length > 5 * 1024 * 1024) return res.status(413).json({ error: "Each file must be smaller than 5 MB." });
+      const path = sessionId + "/" + crypto.randomUUID() + "-" + name.replace(/[^a-z0-9._-]/gi, "_");
+      const { error: uploadError } = await supabase.storage.from("chat-attachments").upload(path, buffer, { contentType: type, upsert: false });
+      if (uploadError) throw uploadError;
+      savedAttachments.push({ name, type, size: buffer.length, path });
+      if (type.startsWith("image/")) imageParts.push({ type: "image_url", image_url: { url: "data:" + type + ";base64," + buffer.toString("base64") } });
+      else if (type.startsWith("text/") || type === "application/json") extractedText.push("\n\n--- " + name + " ---\n" + buffer.toString("utf8").slice(0, 30000));
+      else extractedText.push("\n\n[PDF attached: " + name + ". It is saved in this chat, but this provider integration does not extract PDF text yet.]");
+    }
+    const userText = (content || "Please review the attached file(s).") + extractedText.join("");
+    const storedUser = JSON.stringify({ kind: "chat_message", text: content, attachments: savedAttachments });
     let previous = [];
     if (supabase) {
       const { data, error } = await supabase.from("chat_messages").select("role,content").eq("session_id", sessionId).order("created_at", { ascending: true }).limit(40);
       if (error) throw error;
       previous = data || [];
-    } else {
-      previous = memoryMessages.get(sessionId) || [];
-    }
-    const messages = [...previous.map(m => ({ role: m.role, content: m.content })), { role: "user", content }];
-    await persistMessage(sessionId, "user", content);
+    } else previous = memoryMessages.get(sessionId) || [];
+    let messages = await providerHistory(previous);
+    const currentContent = imageParts.length ? [{ type: "text", text: userText }, ...imageParts] : userText;
+    messages.push({ role: "user", content: currentContent });
+    await persistMessage(sessionId, "user", storedUser);
     let answer;
     if (AI_PROVIDER === "anthropic") {
+      if (imageParts.length) throw new Error("Image understanding is currently supported through the OpenAI-compatible provider only.");
       answer = await requestAnthropic(messages);
     } else {
       const mode = req.body?.modelMode === "manual" ? "manual" : "auto";
@@ -246,13 +307,11 @@ app.post("/api/chat", requireAuth, async (req, res) => {
       if (mode === "manual") {
         if (!requestedModel || !available.includes(requestedModel)) return res.status(400).json({ error: "Choose a model from the current provider model list." });
         candidates = [requestedModel];
-      } else {
-        candidates = [...(process.env.AI_MODEL && available.includes(process.env.AI_MODEL) ? [process.env.AI_MODEL] : []), ...available.filter(id => id !== process.env.AI_MODEL)].slice(0, 8);
-      }
+      } else candidates = [...(process.env.AI_MODEL && available.includes(process.env.AI_MODEL) ? [process.env.AI_MODEL] : []), ...available.filter(id => id !== process.env.AI_MODEL)].slice(0, 8);
       let lastError;
       for (const model of candidates) {
         try { answer = await requestCompatible(messages, model); if (answer) break; throw new Error("The provider returned an empty response."); }
-        catch (error) { lastError = error; console.warn(`Model attempt failed (${model}): ${error.message}`); }
+        catch (error) { lastError = error; console.warn("Model attempt failed (" + model + "): " + error.message); }
       }
       if (!answer) throw new Error(lastError?.message || "No available model could answer this request.");
     }
@@ -261,7 +320,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     return res.json({ answer, persistence: supabaseReady ? "supabase" : "memory-only" });
   } catch (error) {
     console.error("chat error:", error.message);
-    return res.status(502).json({ error: error.message || "The AI request failed. Check provider settings." });
+    return res.status(502).json({ error: error.message || "The AI request failed." });
   }
 });
 
