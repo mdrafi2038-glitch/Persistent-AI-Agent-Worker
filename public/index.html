@@ -1,93 +1,81 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111827">
-  <title>Persistent AI Agent</title>
-  <style>
-    :root{color-scheme:dark;--bg:#0b1020;--panel:#121a2c;--line:#26334b;--muted:#93a4bd;--text:#f2f5fb;--accent:#7c9cff;--user:#233b66}
-    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#172341 0,#0b1020 48%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100dvh}
-    button,input,textarea{font:inherit}button{cursor:pointer} .shell{max-width:900px;margin:auto;min-height:100dvh;display:flex;flex-direction:column;padding:16px;gap:12px}
-    header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px}.brand{font-weight:750;font-size:1.05rem;letter-spacing:.2px}.sub{font-size:.8rem;color:var(--muted)}
-    .panel{border:1px solid var(--line);background:rgba(18,26,44,.92);border-radius:18px;padding:18px;box-shadow:0 12px 40px #0002}
-    #login{max-width:420px;width:100%;margin:auto}.field{width:100%;background:#0b1222;color:var(--text);border:1px solid #34435e;border-radius:12px;padding:13px;margin:8px 0 12px}
-    .primary{background:var(--accent);color:#0b1020;font-weight:750;border:0;border-radius:12px;padding:12px 16px}.secondary{background:#1a2740;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
-    #app{display:none;flex:1;min-height:0;flex-direction:column}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.status{color:var(--muted);font-size:.78rem;margin-left:auto}
-    #messages{flex:1;min-height:42vh;max-height:65vh;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:4px 2px 14px}
-    .msg{max-width:92%;padding:12px 14px;border-radius:15px;white-space:pre-wrap;overflow-wrap:anywhere}.user{align-self:flex-end;background:var(--user)}.assistant{align-self:flex-start;background:#172237;border:1px solid #2a3852}
-    .empty{margin:auto;text-align:center;color:var(--muted);padding:28px 10px}.composer{display:flex;gap:8px;align-items:flex-end;border-top:1px solid var(--line);padding-top:12px}
-    textarea{resize:vertical;min-height:48px;max-height:180px;flex:1;background:#0b1222;color:var(--text);border:1px solid #34435e;border-radius:12px;padding:12px;outline:none}
-    .hint{font-size:.78rem;color:var(--muted);padding:2px 2px 8px}.error{color:#ffb4b4;font-size:.88rem;min-height:1.2em}
-    @media(max-width:560px){.shell{padding:10px}.panel{padding:12px;border-radius:14px}#messages{max-height:none;min-height:50vh}.msg{max-width:97%}.status{width:100%;margin-left:0}.composer{position:sticky;bottom:0;background:var(--panel);padding-bottom:env(safe-area-inset-bottom)}}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101010">
+<title>Persistent AI Agent</title>
+<style>
+:root{color-scheme:dark;--bg:#101010;--panel:#181818;--panel2:#212121;--line:#303030;--muted:#a1a1aa;--text:#f4f4f5;--accent:#d9d9d9;--user:#303030}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100dvh}button,input,textarea,select{font:inherit}button{cursor:pointer}
+.shell{display:flex;min-height:100dvh}.sidebar{width:270px;flex:0 0 270px;background:#171717;border-right:1px solid #262626;padding:16px 12px;display:flex;flex-direction:column;gap:12px}.brand{font-weight:750;font-size:1rem;padding:7px 9px}.new-chat{width:100%;text-align:left;background:transparent;border:1px solid #3a3a3a;color:var(--text);border-radius:12px;padding:11px 12px}.new-chat:hover,.history-item:hover{background:#242424}.side-label{font-size:.75rem;color:var(--muted);padding:8px 9px 2px}.history{overflow:auto;flex:1}.history-item{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;color:var(--text);border-radius:9px;padding:9px 10px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem}.history-item.active{background:#292929;border-color:#383838}.side-bottom{border-top:1px solid #303030;padding-top:12px}.small-muted{font-size:.76rem;color:var(--muted);padding:6px 8px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:100dvh}.topbar{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid #242424;gap:12px}.top-title{font-weight:650}.top-actions{display:flex;align-items:center;gap:8px}.select,.ghost{background:#202020;color:var(--text);border:1px solid #383838;border-radius:10px;padding:8px 10px}.status{font-size:.75rem;color:var(--muted)}
+.chat-wrap{width:min(850px,100%);margin:0 auto;display:flex;flex:1;min-height:0;flex-direction:column;padding:18px 22px 12px}.messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:22px;padding:22px 0 28px}.welcome{margin:auto;text-align:center;color:#eee;padding:30px 10px}.welcome h1{font-size:1.8rem;font-weight:600;margin:0 0 8px}.welcome p{color:var(--muted);margin:0}
+.msg{max-width:100%;display:flex;gap:12px;align-items:flex-start}.msg.user{justify-content:flex-end}.bubble{max-width:min(90%,720px);white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}.user .bubble{background:var(--user);border-radius:20px;padding:11px 16px}.assistant .bubble{padding:2px 0}.avatar{width:28px;height:28px;flex:0 0 28px;border-radius:50%;display:grid;place-items:center;background:#292929;color:#fff;font-size:.82rem}.user .avatar{display:none}
+.composer-area{position:sticky;bottom:0;padding:10px 0 max(10px,env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 18%)}.composer-box{border:1px solid #414141;background:#202020;border-radius:24px;padding:10px 12px 9px;box-shadow:0 8px 30px #0005}.attachment-strip{display:flex;flex-wrap:wrap;gap:8px;padding:0 3px 8px}.file-chip{position:relative;display:flex;align-items:center;gap:8px;background:#303030;border:1px solid #4a4a4a;border-radius:12px;padding:7px 30px 7px 8px;max-width:220px;font-size:.78rem}.file-chip img{width:36px;height:36px;object-fit:cover;border-radius:7px}.file-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-chip button{position:absolute;right:5px;top:5px;border:0;background:#454545;color:white;border-radius:50%;width:20px;height:20px;padding:0}
+.composer-row{display:flex;align-items:flex-end;gap:8px}.attach-btn,.send-btn{border:0;border-radius:50%;width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center}.attach-btn{background:#343434;color:white;font-size:1.35rem}.send-btn{background:#f3f3f3;color:#111;font-weight:800;font-size:1.1rem}.send-btn:disabled{opacity:.45;cursor:default}.composer textarea{flex:1;min-width:0;resize:none;max-height:180px;min-height:38px;border:0;outline:0;background:transparent;color:var(--text);padding:8px 4px;line-height:1.45}.composer textarea::placeholder{color:#a1a1aa}.hint{text-align:center;font-size:.72rem;color:#858585;padding-top:9px}.error{color:#ffaaaa;font-size:.85rem;min-height:1.2em;padding:0 4px}
+.msg-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}.msg-files img{max-width:230px;max-height:220px;object-fit:contain;border-radius:12px;border:1px solid #444}.file-link{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid #4a4a4a;border-radius:10px;color:#e5e5e5;text-decoration:none;font-size:.82rem;background:#242424}
+#login{width:min(400px,calc(100% - 32px));margin:auto;padding:26px;background:#1b1b1b;border:1px solid #333;border-radius:18px}#login h2{margin:0 0 6px}.field{width:100%;padding:12px;border-radius:10px;background:#101010;color:white;border:1px solid #444;margin:9px 0 13px}.primary{width:100%;background:#f2f2f2;color:#111;font-weight:700;border:0;border-radius:10px;padding:12px}
+@media(max-width:720px){.sidebar{width:220px;flex-basis:220px}.topbar{padding:0 12px}.chat-wrap{padding:12px 12px 8px}}
+@media(max-width:560px){.shell{display:block}.sidebar{width:100%;height:auto;max-height:210px;border-right:0;border-bottom:1px solid #292929;padding:8px 10px;gap:5px}.brand{padding:4px 6px}.history{max-height:80px}.side-label{padding:3px 7px}.side-bottom{display:none}.main{min-height:calc(100dvh - 210px)}.topbar{height:50px}.status{display:none}.chat-wrap{min-height:calc(100dvh - 260px);padding:8px 10px}.messages{padding:12px 0}.welcome h1{font-size:1.4rem}.bubble{max-width:95%}.msg-files img{max-width:180px;max-height:180px}}
+</style>
 </head>
 <body>
-  <main class="shell">
-    <header><div><div class="brand">✦ Persistent AI Agent</div><div class="sub">Private chat · mobile-friendly</div></div><button id="logout" class="secondary" hidden>Sign out</button></header>
-    <section id="login" class="panel">
-      <h2 style="margin:0 0 4px">Sign in</h2><p class="sub">Enter your app password to open your AI dashboard.</p>
-      <form id="loginForm"><label for="password">App password</label><input id="password" class="field" type="password" autocomplete="current-password" required><button class="primary" style="width:100%">Continue</button></form>
-      <div id="loginError" class="error" role="status"></div>
-    </section>
-    <section id="app">
-      <div class="toolbar"><button id="newChat" class="secondary">＋ New chat</button><label class="sub" for="modelMode">Model</label><select id="modelMode" class="secondary" aria-label="Model selection mode"><option value="auto">Auto</option><option value="manual">Manual</option></select><select id="modelChoice" class="secondary" aria-label="Choose model" hidden></select><span id="status" class="status">Checking configuration…</span></div>
-      <div id="messages" class="panel" aria-live="polite"><div class="empty">Start a conversation with your AI assistant.</div></div>
-      <form id="chatForm" class="composer"><textarea id="message" rows="1" maxlength="12000" placeholder="Message your AI assistant…" aria-label="Message" required></textarea><button id="send" class="primary">Send</button></form>
-      <div class="hint">Do not send passwords, API keys, or other sensitive secrets in chat.</div>
-      <div id="chatError" class="error" role="status"></div>
-    </section>
-  </main>
+<section id="login">
+<h2>Sign in</h2><p style="color:#aaa;margin:0 0 16px">Open your private AI workspace.</p>
+<form id="loginForm"><label for="password">App password</label><input id="password" class="field" type="password" autocomplete="current-password" required><button class="primary">Continue</button></form><div id="loginError" class="error"></div>
+</section>
+<div id="app" class="shell" hidden>
+<aside class="sidebar">
+<div class="brand">✦ Persistent AI</div>
+<button id="newChat" class="new-chat">＋ &nbsp;New chat</button>
+<div class="side-label">Your chats</div>
+<div id="historyList" class="history"><div class="small-muted">Your conversations appear here.</div></div>
+<div class="side-bottom"><div class="small-muted">Private workspace · Supabase history</div><button id="logout" class="new-chat">Sign out</button></div>
+</aside>
+<main class="main">
+<div class="topbar"><div class="top-title">Chat</div><div class="top-actions"><select id="modelMode" class="select" aria-label="Model mode"><option value="auto">Auto</option><option value="manual">Manual</option></select><select id="modelChoice" class="select" aria-label="Choose model" hidden></select><span id="status" class="status">Checking…</span><button id="mobileLogout" class="ghost" hidden>↗</button></div></div>
+<div class="chat-wrap">
+<div id="messages" class="messages" aria-live="polite"><div class="welcome"><h1>How can I help?</h1><p>Ask anything, or attach a photo or file.</p></div></div>
+<form id="chatForm" class="composer-area">
+<div class="composer-box"><div id="attachmentStrip" class="attachment-strip"></div><div class="composer-row">
+<button type="button" id="attachButton" class="attach-btn" aria-label="Attach files" title="Attach files">＋</button>
+<input id="fileInput" type="file" accept="image/*,.pdf,.txt,.md,.csv,.json" multiple hidden>
+<textarea id="message" rows="1" maxlength="12000" placeholder="Message Persistent AI…" aria-label="Message"></textarea>
+<button id="send" class="send-btn" aria-label="Send message" title="Send">↑</button>
+</div></div>
+<div class="hint">Images, PDF, TXT, MD, CSV and JSON · up to 4 files · 5 MB each</div>
+<div id="chatError" class="error" role="status"></div>
+</form>
+</div>
+</main>
+</div>
 <script>
 (() => {
-  const $ = id => document.getElementById(id);
-  let sessionId = crypto.randomUUID();
-  let busy = false;
-  let availableModels = [];
-  const setBusy = value => { busy = value; $("send").disabled = value; $("send").textContent = value ? "…" : "Send"; };
-  const addMessage = (role, content) => {
-    const empty = $("messages").querySelector(".empty"); if (empty) empty.remove();
-    const el = document.createElement("div"); el.className = "msg " + role; el.textContent = content; $("messages").appendChild(el); $("messages").scrollTop = $("messages").scrollHeight; return el;
-  };
-  const showApp = () => { $("login").style.display = "none"; $("app").style.display = "flex"; $("logout").hidden = false; };
-  async function api(url, options={}) {
-    const response = await fetch(url, { ...options, headers: { "content-type":"application/json", ...(options.headers||{}) } });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Request failed.");
-    return data;
-  }
-  async function loadModels() {
-    const data = await api("/api/models");
-    availableModels = Array.isArray(data.models) ? data.models : [];
-    const select = $("modelChoice"); select.innerHTML = "";
-    availableModels.forEach(id => { const option = document.createElement("option"); option.value = id; option.textContent = id; select.appendChild(option); });
-    if (data.preferred && availableModels.includes(data.preferred)) select.value = data.preferred;
-    $("modelMode").disabled = availableModels.length === 0;
-    select.hidden = $("modelMode").value !== "manual" || availableModels.length === 0;
-  }
-  $("modelMode").addEventListener("change", () => { $("modelChoice").hidden = $("modelMode").value !== "manual" || availableModels.length === 0; });
-  async function checkStatus() {
-    const s = await api("/api/status");
-    $("status").textContent = !s.configuration.password ? "Set APP_PASSWORD" : !s.configuration.sessionSecret ? "Set SESSION_SECRET" : !s.configuration.aiKey ? "AI key missing" : !s.persistenceConfigured ? "History not persistent — configure Supabase" : "Ready · Supabase history on";
-  }
-  $("loginForm").addEventListener("submit", async e => {
-    e.preventDefault(); $("loginError").textContent = "";
-    try { await api("/api/login", {method:"POST",body:JSON.stringify({password:$("password").value})}); $("password").value=""; showApp(); await checkStatus(); await loadModels(); }
-    catch(err) { $("loginError").textContent = err.message; }
-  });
-  $("logout").addEventListener("click", async () => { await api("/api/logout",{method:"POST"}).catch(()=>{}); $("app").style.display="none"; $("login").style.display="block"; $("logout").hidden=true; $("messages").innerHTML='<div class="empty">Sign in to start a conversation.</div>'; });
-  $("newChat").addEventListener("click", () => { sessionId=crypto.randomUUID(); $("messages").innerHTML='<div class="empty">Start a new conversation with your AI assistant.</div>'; $("chatError").textContent=""; });
-  $("chatForm").addEventListener("submit", async e => {
-    e.preventDefault(); if (busy) return;
-    const content=$("message").value.trim(); if(!content) return;
-    $("message").value=""; $("chatError").textContent=""; addMessage("user",content); setBusy(true);
-    const pending=addMessage("assistant","Thinking…");
-    try { const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:content,modelMode:$("modelMode").value,model:$("modelChoice").value})}); pending.textContent=data.answer; if(data.persistence!=="supabase") $("status").textContent="Warning: history is memory-only"; }
-    catch(err) { pending.textContent=""; pending.remove(); $("chatError").textContent=err.message; }
-    finally { setBusy(false); $("message").focus(); }
-  });
-  $("message").addEventListener("keydown", e => { if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("chatForm").requestSubmit();} });
-  checkStatus().catch(()=>{ $("status").textContent="Configuration check unavailable"; });
+const $=id=>document.getElementById(id);let sessionId=crypto.randomUUID(),busy=false,availableModels=[],pendingFiles=[];
+const api=async(url,options={})=>{const response=await fetch(url,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||"Request failed.");return data;};
+const setBusy=v=>{busy=v;$("send").disabled=v;$("send").textContent=v?"…":"↑";$("attachButton").disabled=v;};
+function welcome(){ $("messages").innerHTML='<div class="welcome"><h1>How can I help?</h1><p>Ask anything, or attach a photo or file.</p></div>'; }
+function parseContent(raw){try{const x=JSON.parse(raw);if(x&&x.kind==="chat_message")return x;}catch{}return {text:raw,attachments:[]};}
+function addMessage(role,raw){const data=role==="user"?parseContent(raw):{text:raw,attachments:[]};const row=document.createElement("div");row.className="msg "+role;if(role==="assistant"){const av=document.createElement("div");av.className="avatar";av.textContent="✦";row.appendChild(av);}const bubble=document.createElement("div");bubble.className="bubble";if(data.text) {const text=document.createElement("div");text.textContent=data.text;bubble.appendChild(text);}if(data.attachments?.length){const files=document.createElement("div");files.className="msg-files";data.attachments.forEach(file=>{if(file.type?.startsWith("image/")&&file.url){const img=document.createElement("img");img.src=file.url;img.alt=file.name;files.appendChild(img);}else{const link=document.createElement("a");link.className="file-link";link.textContent="📎 "+file.name;link.href=file.url||"#";link.target="_blank";link.rel="noopener";files.appendChild(link);}});bubble.appendChild(files);}row.appendChild(bubble);$("messages").appendChild(row);$("messages").scrollTop=$("messages").scrollHeight;return row;}
+async function loadHistory(){const data=await api("/api/sessions");const list=$("historyList");list.innerHTML="";if(!data.sessions?.length){list.innerHTML='<div class="small-muted">No saved chats yet.</div>';return;}data.sessions.forEach(item=>{const b=document.createElement("button");b.className="history-item"+(item.id===sessionId?" active":"");b.textContent=item.title||"New chat";b.title=item.title||"New chat";b.addEventListener("click",()=>openChat(item.id));list.appendChild(b);});}
+async function openChat(id){if(busy)return;sessionId=id;$("chatError").textContent="";$("messages").innerHTML="";const data=await api("/api/history/"+encodeURIComponent(id));if(!data.messages?.length)welcome();else data.messages.forEach(m=>addMessage(m.role,m.content));await loadHistory();}
+async function loadModels(){const data=await api("/api/models");availableModels=data.models||[];const sel=$("modelChoice");sel.innerHTML="";availableModels.forEach(id=>{const o=document.createElement("option");o.value=id;o.textContent=id;sel.appendChild(o);});if(data.preferred&&availableModels.includes(data.preferred))sel.value=data.preferred;$("modelMode").disabled=!availableModels.length;sel.hidden=$("modelMode").value!=="manual"||!availableModels.length;}
+async function checkStatus(){const s=await api("/api/status");$("status").textContent=!s.configuration.aiKey?"AI key missing":!s.persistenceConfigured?"History not persistent":"Ready · saved history";}
+function showApp(){ $("login").hidden=true;$("app").hidden=false;$("mobileLogout").hidden=false;}
+function renderPending(){const strip=$("attachmentStrip");strip.innerHTML="";pendingFiles.forEach((file,i)=>{const chip=document.createElement("div");chip.className="file-chip";if(file.type.startsWith("image/")){const img=document.createElement("img");img.src=URL.createObjectURL(file);chip.appendChild(img);}const name=document.createElement("span");name.textContent=file.name;chip.appendChild(name);const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label","Remove "+file.name);remove.addEventListener("click",()=>{pendingFiles.splice(i,1);renderPending();});chip.appendChild(remove);strip.appendChild(chip);});}
+function fileData(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,type:file.type||"application/octet-stream",data:reader.result});reader.onerror=()=>reject(new Error("Could not read "+file.name));reader.readAsDataURL(file);});}
+$("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await api("/api/login",{method:"POST",body:JSON.stringify({password:$("password").value})});$("password").value="";showApp();await Promise.all([checkStatus(),loadModels(),loadHistory()]);}catch(err){$("loginError").textContent=err.message;}});
+async function logout(){await api("/api/logout",{method:"POST"}).catch(()=>{});$("app").hidden=true;$("login").hidden=false;welcome();$("historyList").innerHTML="";}
+$("logout").addEventListener("click",logout);$("mobileLogout").addEventListener("click",logout);
+$("modelMode").addEventListener("change",()=>{$("modelChoice").hidden=$("modelMode").value!=="manual"||!availableModels.length;});
+$("newChat").addEventListener("click",()=>{sessionId=crypto.randomUUID();welcome();$("chatError").textContent="";pendingFiles=[];renderPending();loadHistory().catch(()=>{});});
+$("attachButton").addEventListener("click",()=>$("fileInput").click());
+$("fileInput").addEventListener("change",e=>{const selected=[...e.target.files];for(const f of selected){if(pendingFiles.length>=4)break;if(f.size>5*1024*1024){$("chatError").textContent=f.name+" is larger than 5 MB.";continue;}pendingFiles.push(f);}renderPending();e.target.value="";});
+$("chatForm").addEventListener("submit",async e=>{e.preventDefault();if(busy)return;const text=$("message").value.trim();if(!text&&!pendingFiles.length)return;$("chatError").textContent="";setBusy(true);const files=pendingFiles.slice();const userData=JSON.stringify({kind:"chat_message",text,attachments:files.map(f=>({name:f.name,type:f.type}))});addMessage("user",userData);const pending=addMessage("assistant","Thinking…");$("message").value="";pendingFiles=[];renderPending();try{const attachments=await Promise.all(files.map(fileData));const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:text,attachments,modelMode:$("modelMode").value,model:$("modelChoice").value})});pending.textContent=data.answer;if(data.persistence!=="supabase")$("status").textContent="Warning: not persistent";await loadHistory();}catch(err){pending.remove();$("chatError").textContent=err.message;}finally{setBusy(false);$("message").focus();}});
+$("message").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("chatForm").requestSubmit();}});
+$("message").addEventListener("input",()=>{$("message").style.height="auto";$("message").style.height=Math.min($("message").scrollHeight,180)+"px";});
+checkStatus().catch(()=>{});
 })();
 </script>
 </body>
