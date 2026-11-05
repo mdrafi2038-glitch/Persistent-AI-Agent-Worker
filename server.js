@@ -152,11 +152,11 @@ async function persistMessage(sessionId, role, content) {
     const { data: existing, error: lookupError } = await supabase.from("chat_sessions").select("id,title").eq("id", sessionId).maybeSingle();
     if (lookupError) throw lookupError;
     if (!existing) {
-      const { error } = await supabase.from("chat_sessions").insert({ id: sessionId, title: role === "user" ? content.slice(0, 70) : "New chat", created_at: now, updated_at: now });
+      const { error } = await supabase.from("chat_sessions").insert({ id: sessionId, title: role === "user" ? (() => { try { const v = JSON.parse(content); return String(v.text || v.attachments?.[0]?.name || "New chat").slice(0, 70); } catch { return content.slice(0, 70); } })() : "New chat", created_at: now, updated_at: now });
       if (error) throw error;
     } else {
       const updates = { updated_at: now };
-      if (role === "user" && (!existing.title || existing.title === "New chat")) updates.title = content.slice(0, 70);
+      if (role === "user" && (!existing.title || existing.title === "New chat")) { try { const v = JSON.parse(content); updates.title = String(v.text || v.attachments?.[0]?.name || "New chat").slice(0, 70); } catch { updates.title = content.slice(0, 70); } }
       const { error } = await supabase.from("chat_sessions").update(updates).eq("id", sessionId);
       if (error) throw error;
     }
