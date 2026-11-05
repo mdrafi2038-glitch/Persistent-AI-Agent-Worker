@@ -103,6 +103,20 @@ app.post("/api/logout", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/sessions", requireAuth, async (_req, res) => {
+  try {
+    if (supabase) {
+      const { data, error } = await supabase.from("chat_sessions").select("id,title,created_at,updated_at").order("updated_at", { ascending: false }).limit(100);
+      if (error) throw error;
+      return res.json({ sessions: data || [] });
+    }
+    return res.json({ sessions: [...memorySessions.values()].sort((a,b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0)) });
+  } catch (error) {
+    console.error("sessions error:", error.message);
+    return res.status(500).json({ error: "Could not load chat list." });
+  }
+});
+
 app.get("/api/history/:sessionId", requireAuth, async (req, res) => {
   const sessionId = String(req.params.sessionId || "");
   if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return res.status(400).json({ error: "Invalid conversation ID." });
@@ -120,20 +134,29 @@ app.get("/api/history/:sessionId", requireAuth, async (req, res) => {
 });
 
 async function persistMessage(sessionId, role, content) {
+  const now = new Date().toISOString();
   if (supabase) {
-    const { error: sessionError } = await supabase.from("chat_sessions").upsert({
-      id: sessionId,
-      title: role === "user" ? content.slice(0, 70) : "New chat",
-      updated_at: new Date().toISOString()
-    }, { onConflict: "id", ignoreDuplicates: false });
-    if (sessionError) throw sessionError;
+    const { data: existing, error: lookupError } = await supabase.from("chat_sessions").select("id,title").eq("id", sessionId).maybeSingle();
+    if (lookupError) throw lookupError;
+    if (!existing) {
+      const { error } = await supabase.from("chat_sessions").insert({ id: sessionId, title: role === "user" ? content.slice(0, 70) : "New chat", created_at: now, updated_at: now });
+      if (error) throw error;
+    } else {
+      const updates = { updated_at: now };
+      if (role === "user" && (!existing.title || existing.title === "New chat")) updates.title = content.slice(0, 70);
+      const { error } = await supabase.from("chat_sessions").update(updates).eq("id", sessionId);
+      if (error) throw error;
+    }
     const { error } = await supabase.from("chat_messages").insert({ session_id: sessionId, role, content });
     if (error) throw error;
   } else {
     const list = memoryMessages.get(sessionId) || [];
-    list.push({ role, content, created_at: new Date().toISOString() });
+    list.push({ role, content, created_at: now });
     memoryMessages.set(sessionId, list);
-    if (!memorySessions.has(sessionId)) memorySessions.set(sessionId, { id: sessionId, title: content.slice(0, 70) });
+    const current = memorySessions.get(sessionId) || { id: sessionId, title: content.slice(0, 70), created_at: now };
+    if (role === "user" && (!current.title || current.title === "New chat")) current.title = content.slice(0, 70);
+    current.updated_at = now;
+    memorySessions.set(sessionId, current);
   }
 }
 
