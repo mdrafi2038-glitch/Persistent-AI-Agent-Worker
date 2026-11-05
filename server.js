@@ -85,7 +85,7 @@ app.get("/api/status", (_req, res) => {
     configuration: {
       password: Boolean(APP_PASSWORD && APP_PASSWORD !== "change-this-to-a-long-random-password"),
       sessionSecret: SESSION_SECRET.length >= 32,
-      aiKey: AI_PROVIDER === "anthropic" ? Boolean(process.env.ANTHROPIC_API_KEY) : Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL && process.env.AI_MODEL)
+      aiKey: AI_PROVIDER === "anthropic" ? Boolean(process.env.ANTHROPIC_API_KEY) : Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL)
     }
   });
 });
@@ -158,21 +158,42 @@ async function requestAnthropic(messages) {
   return (body.content || []).filter(x => x.type === "text").map(x => x.text).join("\n").trim();
 }
 
-async function requestCompatible(messages) {
-  if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL || !process.env.AI_MODEL) {
-    throw new Error("Set AI_BASE_URL, AI_API_KEY and AI_MODEL for the OpenAI-compatible provider.");
+async function requestCompatible(messages, model) {
+  if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL || !model) {
+    throw new Error("Set AI_BASE_URL and AI_API_KEY, and select an available model.");
   }
   const base = process.env.AI_BASE_URL.replace(/\/+$/, "");
   const response = await fetch(base + "/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${process.env.AI_API_KEY}` },
-    body: JSON.stringify({ model: process.env.AI_MODEL, messages, max_tokens: MAX_OUTPUT_TOKENS }),
+    body: JSON.stringify({ model, messages, max_tokens: MAX_OUTPUT_TOKENS }),
     signal: AbortSignal.timeout(90_000)
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error?.message || `AI gateway returned HTTP ${response.status}`);
   return String(body.choices?.[0]?.message?.content || "").trim();
 }
+
+
+async function fetchCompatibleModels() {
+  if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL) throw new Error("Set AI_BASE_URL and AI_API_KEY first.");
+  const base = process.env.AI_BASE_URL.replace(/\/+$/, "");
+  const response = await fetch(base + "/models", {
+    headers: { authorization: `Bearer ${process.env.AI_API_KEY}` },
+    signal: AbortSignal.timeout(30000)
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error?.message || `Model list request failed (HTTP ${response.status})`);
+  const models = Array.isArray(body.data) ? body.data.map(item => String(item.id || "")).filter(Boolean) : [];
+  if (!models.length) throw new Error("Provider returned no model IDs.");
+  return [...new Set(models)].sort((a, b) => a.localeCompare(b));
+}
+app.get("/api/models", requireAuth, async (_req, res) => {
+  try {
+    const models = AI_PROVIDER === "anthropic" ? [process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest"] : await fetchCompatibleModels();
+    res.json({ models, preferred: process.env.AI_MODEL || "" });
+  } catch (error) { res.status(502).json({ error: error.message || "Could not load models." }); }
+});
 
 app.post("/api/chat", requireAuth, async (req, res) => {
   const sessionId = String(req.body?.sessionId || "");
@@ -191,7 +212,27 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     }
     const messages = [...previous.map(m => ({ role: m.role, content: m.content })), { role: "user", content }];
     await persistMessage(sessionId, "user", content);
-    const answer = AI_PROVIDER === "anthropic" ? await requestAnthropic(messages) : await requestCompatible(messages);
+    let answer;
+    if (AI_PROVIDER === "anthropic") {
+      answer = await requestAnthropic(messages);
+    } else {
+      const mode = req.body?.modelMode === "manual" ? "manual" : "auto";
+      const requestedModel = String(req.body?.model || "").trim();
+      const available = await fetchCompatibleModels();
+      let candidates;
+      if (mode === "manual") {
+        if (!requestedModel || !available.includes(requestedModel)) return res.status(400).json({ error: "Choose a model from the current provider model list." });
+        candidates = [requestedModel];
+      } else {
+        candidates = [...(process.env.AI_MODEL && available.includes(process.env.AI_MODEL) ? [process.env.AI_MODEL] : []), ...available.filter(id => id !== process.env.AI_MODEL)].slice(0, 8);
+      }
+      let lastError;
+      for (const model of candidates) {
+        try { answer = await requestCompatible(messages, model); if (answer) break; throw new Error("The provider returned an empty response."); }
+        catch (error) { lastError = error; console.warn(`Model attempt failed (${model}): ${error.message}`); }
+      }
+      if (!answer) throw new Error(lastError?.message || "No available model could answer this request.");
+    }
     if (!answer) throw new Error("The AI provider returned an empty response.");
     await persistMessage(sessionId, "assistant", answer);
     return res.json({ answer, persistence: supabaseReady ? "supabase" : "memory-only" });
