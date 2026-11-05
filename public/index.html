@@ -31,9 +31,9 @@
       <div id="loginError" class="error" role="status"></div>
     </section>
     <section id="app">
-      <div class="toolbar"><button id="newChat" class="secondary">＋ New chat</button><span id="status" class="status">Checking configuration…</span></div>
-      <div id="messages" class="panel" aria-live="polite"><div class="empty">Start a conversation with Claude.</div></div>
-      <form id="chatForm" class="composer"><textarea id="message" rows="1" maxlength="12000" placeholder="Message Claude…" aria-label="Message" required></textarea><button id="send" class="primary">Send</button></form>
+      <div class="toolbar"><button id="newChat" class="secondary">＋ New chat</button><label class="sub" for="modelMode">Model</label><select id="modelMode" class="secondary" aria-label="Model selection mode"><option value="auto">Auto</option><option value="manual">Manual</option></select><select id="modelChoice" class="secondary" aria-label="Choose model" hidden></select><span id="status" class="status">Checking configuration…</span></div>
+      <div id="messages" class="panel" aria-live="polite"><div class="empty">Start a conversation with your AI assistant.</div></div>
+      <form id="chatForm" class="composer"><textarea id="message" rows="1" maxlength="12000" placeholder="Message your AI assistant…" aria-label="Message" required></textarea><button id="send" class="primary">Send</button></form>
       <div class="hint">Do not send passwords, API keys, or other sensitive secrets in chat.</div>
       <div id="chatError" class="error" role="status"></div>
     </section>
@@ -43,6 +43,7 @@
   const $ = id => document.getElementById(id);
   let sessionId = crypto.randomUUID();
   let busy = false;
+  let availableModels = [];
   const setBusy = value => { busy = value; $("send").disabled = value; $("send").textContent = value ? "…" : "Send"; };
   const addMessage = (role, content) => {
     const empty = $("messages").querySelector(".empty"); if (empty) empty.remove();
@@ -55,23 +56,33 @@
     if (!response.ok) throw new Error(data.error || "Request failed.");
     return data;
   }
+  async function loadModels() {
+    const data = await api("/api/models");
+    availableModels = Array.isArray(data.models) ? data.models : [];
+    const select = $("modelChoice"); select.innerHTML = "";
+    availableModels.forEach(id => { const option = document.createElement("option"); option.value = id; option.textContent = id; select.appendChild(option); });
+    if (data.preferred && availableModels.includes(data.preferred)) select.value = data.preferred;
+    $("modelMode").disabled = availableModels.length === 0;
+    select.hidden = $("modelMode").value !== "manual" || availableModels.length === 0;
+  }
+  $("modelMode").addEventListener("change", () => { $("modelChoice").hidden = $("modelMode").value !== "manual" || availableModels.length === 0; });
   async function checkStatus() {
     const s = await api("/api/status");
     $("status").textContent = !s.configuration.password ? "Set APP_PASSWORD" : !s.configuration.sessionSecret ? "Set SESSION_SECRET" : !s.configuration.aiKey ? "AI key missing" : !s.persistenceConfigured ? "History not persistent — configure Supabase" : "Ready · Supabase history on";
   }
   $("loginForm").addEventListener("submit", async e => {
     e.preventDefault(); $("loginError").textContent = "";
-    try { await api("/api/login", {method:"POST",body:JSON.stringify({password:$("password").value})}); $("password").value=""; showApp(); await checkStatus(); }
+    try { await api("/api/login", {method:"POST",body:JSON.stringify({password:$("password").value})}); $("password").value=""; showApp(); await checkStatus(); await loadModels(); }
     catch(err) { $("loginError").textContent = err.message; }
   });
   $("logout").addEventListener("click", async () => { await api("/api/logout",{method:"POST"}).catch(()=>{}); $("app").style.display="none"; $("login").style.display="block"; $("logout").hidden=true; $("messages").innerHTML='<div class="empty">Sign in to start a conversation.</div>'; });
-  $("newChat").addEventListener("click", () => { sessionId=crypto.randomUUID(); $("messages").innerHTML='<div class="empty">Start a new conversation with Claude.</div>'; $("chatError").textContent=""; });
+  $("newChat").addEventListener("click", () => { sessionId=crypto.randomUUID(); $("messages").innerHTML='<div class="empty">Start a new conversation with your AI assistant.</div>'; $("chatError").textContent=""; });
   $("chatForm").addEventListener("submit", async e => {
     e.preventDefault(); if (busy) return;
     const content=$("message").value.trim(); if(!content) return;
     $("message").value=""; $("chatError").textContent=""; addMessage("user",content); setBusy(true);
     const pending=addMessage("assistant","Thinking…");
-    try { const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:content})}); pending.textContent=data.answer; if(data.persistence!=="supabase") $("status").textContent="Warning: history is memory-only"; }
+    try { const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:content,modelMode:$("modelMode").value,model:$("modelChoice").value})}); pending.textContent=data.answer; if(data.persistence!=="supabase") $("status").textContent="Warning: history is memory-only"; }
     catch(err) { pending.textContent=""; pending.remove(); $("chatError").textContent=err.message; }
     finally { setBusy(false); $("message").focus(); }
   });
