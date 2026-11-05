@@ -79,7 +79,7 @@ app.get("/health", (_req, res) => res.json({ ok: true, persistence: supabaseRead
 app.get("/api/status", (_req, res) => {
   res.json({
     ok: true,
-    authenticated: false,
+    authenticated: isAuthenticated(_req),
     persistenceConfigured: supabaseReady,
     provider: AI_PROVIDER,
     configuration: {
