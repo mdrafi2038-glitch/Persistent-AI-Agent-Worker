@@ -26,7 +26,7 @@ const memoryMessages = new Map();
 
 app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "9mb" }));
+app.use(express.json({ limit: "28mb" }));
 app.use(express.static("public", { etag: true, maxAge: "1h" }));
 
 const limiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: "draft-8", legacyHeaders: false });
@@ -242,7 +242,7 @@ function parseStoredMessage(item) {
 async function providerHistory(items) {
   return Promise.all(items.map(async item => {
     const saved = parseStoredMessage(item);
-    const parts = [{ type: "text", text: saved.text || "" }];
+    const parts = [{ type: "text", text: saved.modelText || saved.text || "" }];
     for (const file of (saved.attachments || [])) {
       if (file.type?.startsWith("image/") && file.path && supabase) {
         const { data } = await supabase.storage.from("chat-attachments").createSignedUrl(file.path, 3600);
@@ -284,7 +284,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
       else extractedText.push("\n\n[PDF attached: " + name + ". It is saved in this chat, but this provider integration does not extract PDF text yet.]");
     }
     const userText = (content || "Please review the attached file(s).") + extractedText.join("");
-    const storedUser = JSON.stringify({ kind: "chat_message", text: content, attachments: savedAttachments });
+    const storedUser = JSON.stringify({ kind: "chat_message", text: content, modelText: userText, attachments: savedAttachments });
     let previous = [];
     if (supabase) {
       const { data, error } = await supabase.from("chat_messages").select("role,content").eq("session_id", sessionId).order("created_at", { ascending: true }).limit(40);
