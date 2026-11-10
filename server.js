@@ -214,6 +214,14 @@ async function requestCompatible(messages, model, onDelta = null) {
     const body = await response.json().catch(() => ({}));
     return String(body.choices?.[0]?.message?.content || "").trim();
   }
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("text/event-stream")) {
+    const body = await response.json().catch(() => ({}));
+    const fallbackAnswer = String(body.choices?.[0]?.message?.content || "").trim();
+    if (!fallbackAnswer) throw new Error(body.error?.message || "The AI gateway returned neither a stream nor a usable chat response.");
+    onDelta(fallbackAnswer);
+    return fallbackAnswer;
+  }
   if (!response.body) throw new Error("The AI gateway did not provide a streaming response.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
