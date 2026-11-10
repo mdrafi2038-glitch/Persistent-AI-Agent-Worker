@@ -198,7 +198,7 @@ async function requestCompatible(messages, model, onDelta = null) {
   if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL || !model) {
     throw new Error("Set AI_BASE_URL and AI_API_KEY, and select an available model.");
   }
-  const base = process.env.AI_BASE_URL.replace(/\\/+$/, "");
+  const base = process.env.AI_BASE_URL.replace(/\/+$/, "");
   const streaming = typeof onDelta === "function";
   const response = await fetch(base + "/chat/completions", {
     method: "POST",
