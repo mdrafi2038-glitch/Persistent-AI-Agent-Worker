@@ -342,7 +342,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
       res.setHeader("Connection", "keep-alive");
       res.flushHeaders?.();
     }
-    const sendStreamEvent = event => { if (streamRequested && !res.writableEnded) res.write("data: " + JSON.stringify(event) + "\\n\\n"); };
+    const sendStreamEvent = event => { if (streamRequested && !res.writableEnded) res.write("data: " + JSON.stringify(event) + "\n\n"); };
     let answer;
     if (AI_PROVIDER === "anthropic") {
       if (imageParts.length) throw new Error("Image understanding is currently supported through the OpenAI-compatible provider only.");
@@ -378,7 +378,7 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     console.error("chat error:", error.message);
     if (res.headersSent) {
       if (req.body?.stream === true && !res.writableEnded) {
-        res.write("data: " + JSON.stringify({ error: error.message || "The AI request failed." }) + "\\n\\n");
+        res.write("data: " + JSON.stringify({ error: error.message || "The AI request failed." }) + "\n\n");
         return res.end();
       }
       return res.end();
