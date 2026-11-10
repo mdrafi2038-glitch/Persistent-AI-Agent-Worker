@@ -244,7 +244,42 @@ $("menuToggle").addEventListener("click",toggleSidebar);$("sidebarBackdrop").add
 $("newChat").addEventListener("click",()=>{closeSidebar();sessionId=crypto.randomUUID();welcome();$("chatError").textContent="";pendingFiles=[];renderPending();loadHistory().catch(()=>{});});
 $("attachButton").addEventListener("click",()=>$("fileInput").click());
 $("fileInput").addEventListener("change",e=>{const selected=[...e.target.files];for(const f of selected){if(pendingFiles.length>=4)break;if(f.size>5*1024*1024){$("chatError").textContent=f.name+" is larger than 5 MB.";continue;}pendingFiles.push(f);}renderPending();e.target.value="";});
-$("chatForm").addEventListener("submit",async e=>{e.preventDefault();if(busy)return;const text=$("message").value.trim();if(!text&&!pendingFiles.length)return;$("chatError").textContent="";setBusy(true);const files=pendingFiles.slice();const pending=addMessage("assistant","Preparing attachments…");$("message").value="";pendingFiles=[];renderPending();try{const attachments=await Promise.all(files.map(fileData));const userData=JSON.stringify({kind:"chat_message",text,attachments:attachments.map(f=>({name:f.name,type:f.type,url:f.type.startsWith("image/")?f.data:null}))});const userNode=addMessage("user",userData);$("messages").insertBefore(userNode,pending);pending.textContent="Thinking…";const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:text,attachments,modelMode:$("modelMode").value,model:$("modelChoice").value})});pending.textContent=data.answer;if(data.persistence!=="supabase")$("status").textContent="Warning: not persistent";await loadHistory();}catch(err){pending.remove();$("chatError").textContent=err.message;}finally{setBusy(false);$("message").focus();}});
+$("chatForm").addEventListener("submit",async e=>{
+ e.preventDefault();if(busy)return;
+ const text=$("message").value.trim();if(!text&&!pendingFiles.length)return;
+ $("chatError").textContent="";setBusy(true);
+ const files=pendingFiles.slice();const pending=addMessage("assistant","");
+ const cursor=document.createElement("span");cursor.textContent="▍";cursor.style.opacity=".65";pending.querySelector(".bubble").appendChild(cursor);
+ $("message").value="";$("message").style.height="auto";pendingFiles=[];renderPending();
+ try{
+  const attachments=await Promise.all(files.map(fileData));
+  const userData=JSON.stringify({kind:"chat_message",text,attachments:attachments.map(f=>({name:f.name,type:f.type,url:f.type.startsWith("image/")?f.data:null}))});
+  const userNode=addMessage("user",userData);$("messages").insertBefore(userNode,pending);
+  const response=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId,message:text,attachments,modelMode:$("modelMode").value,model:$("modelChoice").value,stream:true})});
+  if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"AI request failed (HTTP "+response.status+").");}
+  if(!response.body)throw new Error("Streaming response is unavailable.");
+  const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="",answer="",persistence="";
+  const bubble=pending.querySelector(".bubble");
+  while(true){
+   const {value,done}=await reader.read();if(done)break;
+   buffer+=decoder.decode(value,{stream:true});
+   const events=buffer.split(/\\r?\\n\\r?\\n/);buffer=events.pop()||"";
+   for(const eventText of events){
+    const line=eventText.split(/\\r?\\n/).find(line=>line.startsWith("data:"));
+    if(!line)continue;
+    let event;try{event=JSON.parse(line.slice(5).trim());}catch{continue;}
+    if(event.error)throw new Error(event.error);
+    if(event.delta){answer+=event.delta;cursor.remove();bubble.textContent=answer;bubble.appendChild(cursor);$("messages").scrollTop=$("messages").scrollHeight;}
+    if(event.done){persistence=event.persistence||"";}
+   }
+  }
+  cursor.remove();
+  if(!answer)throw new Error("The AI provider returned an empty response.");
+  if(persistence!=="supabase")$("status").textContent="Warning: not persistent";
+  await loadHistory();
+ }catch(err){pending.querySelector(".bubble").textContent=err.message;$("chatError").textContent=err.message;}
+ finally{setBusy(false);$("message").focus();}
+});
 $("message").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("chatForm").requestSubmit();}});
 $("message").addEventListener("input",()=>{$("message").style.height="auto";$("message").style.height=Math.min($("message").scrollHeight,180)+"px";});
 (async()=>{try{const status=await checkStatus();if(status.authenticated){showApp();await Promise.all([loadModels(),loadHistory()]);}}catch(err){console.warn("Session check failed:",err.message);}})();
