@@ -194,20 +194,51 @@ async function requestAnthropic(messages) {
   return (body.content || []).filter(x => x.type === "text").map(x => x.text).join("\n").trim();
 }
 
-async function requestCompatible(messages, model) {
+async function requestCompatible(messages, model, onDelta = null) {
   if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL || !model) {
     throw new Error("Set AI_BASE_URL and AI_API_KEY, and select an available model.");
   }
-  const base = process.env.AI_BASE_URL.replace(/\/+$/, "");
+  const base = process.env.AI_BASE_URL.replace(/\\/+$/, "");
+  const streaming = typeof onDelta === "function";
   const response = await fetch(base + "/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${process.env.AI_API_KEY}` },
-    body: JSON.stringify({ model, messages, max_tokens: MAX_OUTPUT_TOKENS }),
+    body: JSON.stringify({ model, messages, max_tokens: MAX_OUTPUT_TOKENS, stream: streaming }),
     signal: AbortSignal.timeout(90_000)
   });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || `AI gateway returned HTTP ${response.status}`);
-  return String(body.choices?.[0]?.message?.content || "").trim();
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error?.message || `AI gateway returned HTTP ${response.status}`);
+  }
+  if (!streaming) {
+    const body = await response.json().catch(() => ({}));
+    return String(body.choices?.[0]?.message?.content || "").trim();
+  }
+  if (!response.body) throw new Error("The AI gateway did not provide a streaming response.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "", answer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\\r?\\n/);
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let event;
+      try { event = JSON.parse(payload); } catch { continue; }
+      const delta = event.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta) { answer += delta; onDelta(delta); }
+      else if (Array.isArray(delta)) {
+        for (const part of delta) if (part.type === "text" && part.text) { answer += part.text; onDelta(part.text); }
+      }
+      if (event.error?.message) throw new Error(event.error.message);
+    }
+  }
+  return answer.trim();
 }
 
 
@@ -295,6 +326,15 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     const currentContent = imageParts.length ? [{ type: "text", text: userText }, ...imageParts] : userText;
     messages.push({ role: "user", content: currentContent });
     await persistMessage(sessionId, "user", storedUser);
+    const streamRequested = req.body?.stream === true && AI_PROVIDER !== "anthropic";
+    if (streamRequested) {
+      res.status(200);
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders?.();
+    }
+    const sendStreamEvent = event => { if (streamRequested && !res.writableEnded) res.write("data: " + JSON.stringify(event) + "\\n\\n"); };
     let answer;
     if (AI_PROVIDER === "anthropic") {
       if (imageParts.length) throw new Error("Image understanding is currently supported through the OpenAI-compatible provider only.");
@@ -310,16 +350,31 @@ app.post("/api/chat", requireAuth, async (req, res) => {
       } else candidates = [...(process.env.AI_MODEL && available.includes(process.env.AI_MODEL) ? [process.env.AI_MODEL] : []), ...available.filter(id => id !== process.env.AI_MODEL)].slice(0, 8);
       let lastError;
       for (const model of candidates) {
-        try { answer = await requestCompatible(messages, model); if (answer) break; throw new Error("The provider returned an empty response."); }
+        try {
+          answer = await requestCompatible(messages, model, streamRequested ? (delta => sendStreamEvent({ delta })) : null);
+          if (answer) break;
+          throw new Error("The provider returned an empty response.");
+        }
         catch (error) { lastError = error; console.warn("Model attempt failed (" + model + "): " + error.message); }
       }
       if (!answer) throw new Error(lastError?.message || "No available model could answer this request.");
     }
     if (!answer) throw new Error("The AI provider returned an empty response.");
     await persistMessage(sessionId, "assistant", answer);
+    if (streamRequested) {
+      sendStreamEvent({ done: true, persistence: supabaseReady ? "supabase" : "memory-only" });
+      return res.end();
+    }
     return res.json({ answer, persistence: supabaseReady ? "supabase" : "memory-only" });
   } catch (error) {
     console.error("chat error:", error.message);
+    if (res.headersSent) {
+      if (req.body?.stream === true && !res.writableEnded) {
+        res.write("data: " + JSON.stringify({ error: error.message || "The AI request failed." }) + "\\n\\n");
+        return res.end();
+      }
+      return res.end();
+    }
     return res.status(502).json({ error: error.message || "The AI request failed." });
   }
 });
