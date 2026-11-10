@@ -263,9 +263,9 @@ $("chatForm").addEventListener("submit",async e=>{
   while(true){
    const {value,done}=await reader.read();if(done)break;
    buffer+=decoder.decode(value,{stream:true});
-   const events=buffer.split(/\\r?\\n\\r?\\n/);buffer=events.pop()||"";
+   const events=buffer.split(/\r?\n\r?\n/);buffer=events.pop()||"";
    for(const eventText of events){
-    const line=eventText.split(/\\r?\\n/).find(line=>line.startsWith("data:"));
+    const line=eventText.split(/\r?\n/).find(line=>line.startsWith("data:"));
     if(!line)continue;
     let event;try{event=JSON.parse(line.slice(5).trim());}catch{continue;}
     if(event.error)throw new Error(event.error);
