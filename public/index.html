@@ -257,10 +257,17 @@ $("chatForm").addEventListener("submit",async e=>{
   const userNode=addMessage("user",userData);$("messages").insertBefore(userNode,pending);
   const response=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId,message:text,attachments,modelMode:$("modelMode").value,model:$("modelChoice").value,stream:true})});
   if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"AI request failed (HTTP "+response.status+").");}
-  if(!response.body)throw new Error("Streaming response is unavailable.");
-  const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="",answer="",persistence="";
   const bubble=pending.querySelector(".bubble");
-  while(true){
+  let answer="",persistence="";
+  const contentType=response.headers.get("content-type")||"";
+  if(!contentType.includes("text/event-stream")){
+   const data=await response.json().catch(()=>({}));
+   if(!data.answer)throw new Error(data.error||"AI returned an empty response.");
+   answer=String(data.answer);bubble.textContent=answer;persistence=data.persistence||"";
+  }else{
+   if(!response.body)throw new Error("Streaming response is unavailable.");
+   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
+   while(true){
    const {value,done}=await reader.read();if(done)break;
    buffer+=decoder.decode(value,{stream:true});
    const events=buffer.split(/\r?\n\r?\n/);buffer=events.pop()||"";
@@ -271,6 +278,7 @@ $("chatForm").addEventListener("submit",async e=>{
     if(event.error)throw new Error(event.error);
     if(event.delta){answer+=event.delta;cursor.remove();bubble.textContent=answer;bubble.appendChild(cursor);$("messages").scrollTop=$("messages").scrollHeight;}
     if(event.done){persistence=event.persistence||"";}
+   }
    }
   }
   cursor.remove();
