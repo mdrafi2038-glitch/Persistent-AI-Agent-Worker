@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#101010">
-<title>Persistent AI Agent</title>
+<title>Persistent AI Studio</title>
 <style>
 :root{color-scheme:dark;--bg:#101010;--panel:#181818;--panel2:#212121;--line:#303030;--muted:#a1a1aa;--text:#f4f4f5;--accent:#d9d9d9;--user:#303030}
 *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100dvh}button,input,textarea,select{font:inherit}button{cursor:pointer}
@@ -132,6 +132,60 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
 }
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}}
 
+
+/* Claude + ChatGPT hybrid visual refresh — additive overrides only */
+:root{
+  color-scheme:light;
+  --bg:#f7f6f3;--sidebar:#efeee9;--panel:#fff;--panel2:#f1f0ec;
+  --line:#e5e2dc;--muted:#77756f;--text:#292824;--accent:#c46b43;--user:#eeeae3;
+}
+html,body{background:var(--bg);color:var(--text)}
+.shell{background:var(--bg)}
+.sidebar{background:var(--sidebar);border-right:1px solid #e4e1da}
+.brand{color:#2f2d28;font-weight:700;letter-spacing:-.025em}
+.new-chat{color:#33312c;border-color:#d9d5cd;background:rgba(255,255,255,.58)}
+.new-chat:hover,.history-item:hover{background:#e5e2da}
+.side-label,.small-muted{color:#77736b}
+.history-item{color:#4a4842}
+.history-item.active{background:#e3dfd6;border-color:#e3dfd6;color:#26241f}
+.side-bottom{border-color:#dedbd3}
+.main,.topbar{background:var(--bg)}
+.topbar{border-bottom:1px solid #ebe8e1}
+.top-title{color:#34322d}
+.select,.ghost{background:#fff;color:#49463f;border:1px solid #e1ddd5;border-radius:999px}
+.select:focus,.ghost:focus{outline:2px solid #d9a48b;outline-offset:2px}
+.chat-wrap{background:var(--bg)}
+.messages{scrollbar-color:#d1ccc2 transparent}
+.welcome h1{color:#292722;letter-spacing:-.04em;font-weight:620}
+.welcome p{color:#77736b}
+.msg.assistant .avatar{background:#c46b43;color:white}
+.msg.user .bubble{background:#eeeae3;color:#292722;border:1px solid #e7e2d9}
+.msg.assistant .bubble{color:#292722}
+.composer-area{background:linear-gradient(transparent,var(--bg) 16%)}
+.composer-box{background:#fff;border:1px solid #dedad2;border-radius:25px;box-shadow:0 8px 28px rgba(48,42,32,.07)}
+.composer-box:focus-within{border-color:#c9a18d;box-shadow:0 0 0 3px rgba(196,107,67,.09)}
+.composer textarea{color:#292722}
+.composer textarea::placeholder{color:#969189}
+.attach-btn{background:#f0eee9;color:#4d4942;border:1px solid #e6e2da}
+.attach-btn:hover{background:#e8e4dc}
+.send-btn{background:#292722;color:#fff}
+.send-btn:hover{background:#464139}
+.hint{color:#858078}
+.error{color:#b34c3b}
+.file-chip{background:#f3f1ec;border-color:#e3dfd6;color:#39362f}
+.file-link{background:#f5f3ef;border-color:#e1ddd5;color:#403d36}
+#login{background:#fff;border:1px solid #e5e1d9;color:#292722;box-shadow:0 18px 60px rgba(45,40,32,.08)}
+#login .field{background:#faf9f6;color:#292722;border-color:#ddd8cf}
+#login .primary{background:#292722;color:#fff}
+#login p{color:#77736b!important}
+#menuToggle{color:#37342e}
+#sidebarBackdrop.visible{background:rgba(32,29,24,.35)}
+@media(max-width:700px){
+ .sidebar{background:#f1f0eb;box-shadow:12px 0 35px rgba(35,31,24,.12)}
+ .topbar{background:var(--bg)}
+ .composer-area{background:linear-gradient(transparent,var(--bg) 12%)}
+}
+
 </style>
 </head>
 <body>
@@ -142,7 +196,7 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
 <div id="app" class="shell" hidden>
 <div id="sidebarBackdrop" aria-hidden="true"></div>
 <aside id="sidebar" class="sidebar">
-<div class="brand">✦ Persistent AI</div>
+<div class="brand">✦ Persistent AI Studio</div>
 <button id="newChat" class="new-chat">＋ &nbsp;New chat</button>
 <div class="side-label">Your chats</div>
 <div id="historyList" class="history"><div class="small-muted">Your conversations appear here.</div></div>
@@ -151,7 +205,7 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
 <main class="main">
 <div class="topbar"><button id="menuToggle" type="button" aria-label="Open chat history" aria-expanded="false">☰</button><div class="top-title">Chat</div><div class="top-actions"><select id="modelMode" class="select" aria-label="Model mode"><option value="auto">Auto</option><option value="manual">Manual</option></select><select id="modelChoice" class="select" aria-label="Choose model" hidden></select><span id="status" class="status">Checking…</span><button id="mobileLogout" class="ghost" hidden>↗</button></div></div>
 <div class="chat-wrap">
-<div id="messages" class="messages" aria-live="polite"><div class="welcome"><h1>How can I help?</h1><p>Ask anything, or attach a photo or file.</p></div></div>
+<div id="messages" class="messages" aria-live="polite"><div class="welcome"><h1>What would you like to explore?</h1><p>Ask anything. Think, write, code, or explore ideas.</p></div></div>
 <form id="chatForm" class="composer-area">
 <div class="composer-box"><div id="attachmentStrip" class="attachment-strip"></div><div class="composer-row">
 <button type="button" id="attachButton" class="attach-btn" aria-label="Attach files" title="Attach files">＋</button>
@@ -170,7 +224,7 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
 const $=id=>document.getElementById(id);let sessionId=crypto.randomUUID(),busy=false,availableModels=[],pendingFiles=[];
 const api=async(url,options={})=>{const response=await fetch(url,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||"Request failed.");return data;};
 const setBusy=v=>{busy=v;$("send").disabled=v;$("send").textContent=v?"…":"↑";$("attachButton").disabled=v;};
-function welcome(){ $("messages").innerHTML='<div class="welcome"><h1>How can I help?</h1><p>Ask anything, or attach a photo or file.</p></div>'; }
+function welcome(){ $("messages").innerHTML='<div class="welcome"><h1>What would you like to explore?</h1><p>Ask anything. Think, write, code, or explore ideas.</p></div>'; }
 function parseContent(raw){try{const x=JSON.parse(raw);if(x&&x.kind==="chat_message")return x;}catch{}return {text:raw,attachments:[]};}
 function addMessage(role,raw){const data=role==="user"?parseContent(raw):{text:raw,attachments:[]};const row=document.createElement("div");row.className="msg "+role;if(role==="assistant"){const av=document.createElement("div");av.className="avatar";av.textContent="✦";row.appendChild(av);}const bubble=document.createElement("div");bubble.className="bubble";if(data.text) {const text=document.createElement("div");text.textContent=data.text;bubble.appendChild(text);}if(data.attachments?.length){const files=document.createElement("div");files.className="msg-files";data.attachments.forEach(file=>{if(file.type?.startsWith("image/")&&file.url){const img=document.createElement("img");img.src=file.url;img.alt=file.name;files.appendChild(img);}else{const link=document.createElement("a");link.className="file-link";link.textContent="📎 "+file.name;link.href=file.url||"#";link.target="_blank";link.rel="noopener";files.appendChild(link);}});bubble.appendChild(files);}row.appendChild(bubble);$("messages").appendChild(row);$("messages").scrollTop=$("messages").scrollHeight;return row;}
 async function loadHistory(){const data=await api("/api/sessions");const list=$("historyList");list.innerHTML="";if(!data.sessions?.length){list.innerHTML='<div class="small-muted">No saved chats yet.</div>';return;}data.sessions.forEach(item=>{const b=document.createElement("button");b.className="history-item"+(item.id===sessionId?" active":"");b.textContent=item.title||"New chat";b.title=item.title||"New chat";b.addEventListener("click",()=>openChat(item.id));list.appendChild(b);});}
@@ -190,7 +244,50 @@ $("menuToggle").addEventListener("click",toggleSidebar);$("sidebarBackdrop").add
 $("newChat").addEventListener("click",()=>{closeSidebar();sessionId=crypto.randomUUID();welcome();$("chatError").textContent="";pendingFiles=[];renderPending();loadHistory().catch(()=>{});});
 $("attachButton").addEventListener("click",()=>$("fileInput").click());
 $("fileInput").addEventListener("change",e=>{const selected=[...e.target.files];for(const f of selected){if(pendingFiles.length>=4)break;if(f.size>5*1024*1024){$("chatError").textContent=f.name+" is larger than 5 MB.";continue;}pendingFiles.push(f);}renderPending();e.target.value="";});
-$("chatForm").addEventListener("submit",async e=>{e.preventDefault();if(busy)return;const text=$("message").value.trim();if(!text&&!pendingFiles.length)return;$("chatError").textContent="";setBusy(true);const files=pendingFiles.slice();const pending=addMessage("assistant","Preparing attachments…");$("message").value="";pendingFiles=[];renderPending();try{const attachments=await Promise.all(files.map(fileData));const userData=JSON.stringify({kind:"chat_message",text,attachments:attachments.map(f=>({name:f.name,type:f.type,url:f.type.startsWith("image/")?f.data:null}))});const userNode=addMessage("user",userData);$("messages").insertBefore(userNode,pending);pending.textContent="Thinking…";const data=await api("/api/chat",{method:"POST",body:JSON.stringify({sessionId,message:text,attachments,modelMode:$("modelMode").value,model:$("modelChoice").value})});pending.textContent=data.answer;if(data.persistence!=="supabase")$("status").textContent="Warning: not persistent";await loadHistory();}catch(err){pending.remove();$("chatError").textContent=err.message;}finally{setBusy(false);$("message").focus();}});
+$("chatForm").addEventListener("submit",async e=>{
+ e.preventDefault();if(busy)return;
+ const text=$("message").value.trim();if(!text&&!pendingFiles.length)return;
+ $("chatError").textContent="";setBusy(true);
+ const files=pendingFiles.slice();const pending=addMessage("assistant","");
+ const cursor=document.createElement("span");cursor.textContent="▍";cursor.style.opacity=".65";pending.querySelector(".bubble").appendChild(cursor);
+ $("message").value="";$("message").style.height="auto";pendingFiles=[];renderPending();
+ try{
+  const attachments=await Promise.all(files.map(fileData));
+  const userData=JSON.stringify({kind:"chat_message",text,attachments:attachments.map(f=>({name:f.name,type:f.type,url:f.type.startsWith("image/")?f.data:null}))});
+  const userNode=addMessage("user",userData);$("messages").insertBefore(userNode,pending);
+  const response=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId,message:text,attachments,modelMode:$("modelMode").value,model:$("modelChoice").value,stream:true})});
+  if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"AI request failed (HTTP "+response.status+").");}
+  const bubble=pending.querySelector(".bubble");
+  let answer="",persistence="";
+  const contentType=response.headers.get("content-type")||"";
+  if(!contentType.includes("text/event-stream")){
+   const data=await response.json().catch(()=>({}));
+   if(!data.answer)throw new Error(data.error||"AI returned an empty response.");
+   answer=String(data.answer);bubble.textContent=answer;persistence=data.persistence||"";
+  }else{
+   if(!response.body)throw new Error("Streaming response is unavailable.");
+   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer="";
+   while(true){
+   const {value,done}=await reader.read();if(done)break;
+   buffer+=decoder.decode(value,{stream:true});
+   const events=buffer.split(/\r?\n\r?\n/);buffer=events.pop()||"";
+   for(const eventText of events){
+    const line=eventText.split(/\r?\n/).find(line=>line.startsWith("data:"));
+    if(!line)continue;
+    let event;try{event=JSON.parse(line.slice(5).trim());}catch{continue;}
+    if(event.error)throw new Error(event.error);
+    if(event.delta){answer+=event.delta;cursor.remove();bubble.textContent=answer;bubble.appendChild(cursor);$("messages").scrollTop=$("messages").scrollHeight;}
+    if(event.done){persistence=event.persistence||"";}
+   }
+   }
+  }
+  cursor.remove();
+  if(!answer)throw new Error("The AI provider returned an empty response.");
+  if(persistence!=="supabase")$("status").textContent="Warning: not persistent";
+  await loadHistory();
+ }catch(err){pending.querySelector(".bubble").textContent=err.message;$("chatError").textContent=err.message;}
+ finally{setBusy(false);$("message").focus();}
+});
 $("message").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("chatForm").requestSubmit();}});
 $("message").addEventListener("input",()=>{$("message").style.height="auto";$("message").style.height=Math.min($("message").scrollHeight,180)+"px";});
 (async()=>{try{const status=await checkStatus();if(status.authenticated){showApp();await Promise.all([loadModels(),loadHistory()]);}}catch(err){console.warn("Session check failed:",err.message);}})();
