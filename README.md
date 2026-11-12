@@ -54,3 +54,16 @@ See `.env.example`. Required for secure production use: `APP_PASSWORD`, `SESSION
 ## Agent task queue (v1)
 
 The chat dashboard includes a Tasks page at `/tasks.html`. Signed-in users can submit AI reasoning, drafting, analysis, calculation, and summarization tasks; the server worker processes queued tasks and stores their status and result in Supabase. This first version does not control browsers or devices, edit repositories, or perform external actions. Review task output before using it. The worker runs inside the web-service process and is not guaranteed to run continuously on Render Free while the service is asleep.
+
+
+## Autonomous task tools
+
+The task worker can now use provider tool-calling to carry out supported work instead of only drafting instructions.
+
+Optional Render environment variables:
+- `TAVILY_API_KEY`: enables public web search.
+- `GITHUB_TOKEN`: enables GitHub repository reading, file listing, isolated task branches, file changes on those branches, and draft pull requests.
+
+Keep these credentials server-side in Render Environment. Never put them in browser code or chat messages. Use a GitHub token with the narrowest repository permissions needed (Contents: read/write; Pull requests: read/write). The agent writes only to branches named `agent/task-...`; it cannot write to the default branch, merge pull requests, deploy, delete repositories, or modify secrets/workflows/deployment configuration. Draft PRs require human review.
+
+Tool availability is shown by the authenticated `/api/status` endpoint. Browser automation, direct Android/PC control, arbitrary shell execution, and approval workflows are not included in this increment. Render Free may sleep while idle, so scheduled work is not guaranteed to run continuously.

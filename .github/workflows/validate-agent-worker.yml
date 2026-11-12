@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feature/autonomous-agent-clean]
+    branches: [feature/autonomous-agent-clean, feature/agentic-tool-runtime]
 
 jobs:
   validate:
