@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Persistent AI · Tasks</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#212121;color:#eee}
+*{box-sizing:border-box}body{margin:0;min-height:100vh}.wrap{width:min(900px,100%);margin:auto;padding:22px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px}
+a{color:#ddd}h1{font-size:1.35rem;margin:0}p{color:#aaa}.panel,.task{background:#2b2b2b;border:1px solid #414141;border-radius:14px;padding:16px;margin:12px 0}
+label{display:block;font-size:.85rem;color:#bbb;margin:10px 0 6px}input,textarea{width:100%;padding:12px;border-radius:9px;border:1px solid #555;background:#191919;color:#fff;font:inherit}
+textarea{min-height:120px;resize:vertical}button{border:0;border-radius:9px;padding:11px 16px;background:#eee;color:#111;font-weight:650;cursor:pointer;margin-top:12px}
+.task-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.status{font-size:.78rem;padding:4px 9px;border-radius:20px;background:#444}.result{white-space:pre-wrap;line-height:1.55;color:#ddd;overflow-wrap:anywhere}.muted{color:#999;font-size:.85rem}.error{color:#ff9999}
+@media(max-width:600px){.wrap{padding:14px}.task-head{align-items:flex-start;flex-direction:column}}
+</style></head>
+<body><main class="wrap">
+<header><div><h1>✦ AI Worker · Tasks</h1><p>Queue work, follow progress, and review results.</p></div><a href="/">← Back to chat</a></header>
+<section class="panel"><form id="taskForm">
+<label for="title">Task title</label><input id="title" maxlength="120" required placeholder="e.g. Research and summarize a topic">
+<label for="description">Instructions</label><textarea id="description" maxlength="12000" required placeholder="Describe the outcome you want. v1 can reason, draft, analyze and summarize; external browser/device actions are not enabled yet."></textarea>
+<button id="submit" type="submit">Add task to queue</button><div id="error" class="error"></div>
+</form></section>
+<h2>Your tasks</h2><div id="tasks"><p class="muted">Loading…</p></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+async function api(url,options={}){const r=await fetch(url,{...options,headers:{"content-type":"application/json",...(options.headers||{})}});const d=await r.json().catch(()=>({}));if(r.status===401){location.href="/";throw new Error("Please sign in from the main chat first.");}if(!r.ok)throw new Error(d.error||"Request failed.");return d;}
+function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+async function load(){try{const d=await api("/api/tasks");$("tasks").innerHTML=d.tasks.length?d.tasks.map(t=>'<article class="task"><div class="task-head"><strong>'+esc(t.title)+'</strong><span class="status">'+esc(t.status)+'</span></div><p class="muted">'+new Date(t.created_at).toLocaleString()+'</p><p>'+esc(t.description)+'</p>'+(t.result?'<div class="result">'+esc(t.result)+'</div>':"")+(t.status==="queued"?'<button data-cancel="'+esc(t.id)+'">Cancel queued task</button>':"")+'</article>').join(""):'<p class="muted">No tasks yet.</p>';}catch(e){$("tasks").innerHTML='<p class="error">'+esc(e.message)+'</p>';}}
+$("taskForm").addEventListener("submit",async e=>{e.preventDefault();$("error").textContent="";$("submit").disabled=true;try{await api("/api/tasks",{method:"POST",body:JSON.stringify({title:$("title").value,description:$("description").value})});$("title").value="";$("description").value="";await load();}catch(e){$("error").textContent=e.message;}finally{$("submit").disabled=false;}});
+$("tasks").addEventListener("click",async e=>{const id=e.target?.dataset?.cancel;if(!id)return;try{await api("/api/tasks/"+encodeURIComponent(id)+"/cancel",{method:"POST",body:"{}"});await load();}catch(err){alert(err.message);}});
+load();setInterval(load,5000);
+</script></body></html>
