@@ -74,7 +74,7 @@ function registerAgentWorker({ app, supabase, requireAuth, executeTask }) {
       if (!claimed) return;
 
       try {
-        const result = await executeTask(task.description, task.title);
+        const result = await executeTask(task.description, task.title, task.id);
         const { error } = await supabase.from("agent_tasks").update({
           status: "completed",
           result: String(result || "Task completed without a text result.").slice(0, 60000),
