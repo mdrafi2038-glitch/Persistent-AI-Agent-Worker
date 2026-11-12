@@ -49,3 +49,8 @@ Do not assume an OmniRoute dashboard URL is the API base URL; use the API endpoi
 ## Environment variables
 
 See `.env.example`. Required for secure production use: `APP_PASSWORD`, `SESSION_SECRET` (at least 32 characters), a valid AI provider configuration, and Supabase URL + service-role key for durable history.
+
+
+## Agent task queue (v1)
+
+The chat dashboard includes a Tasks page at `/tasks.html`. Signed-in users can submit AI reasoning, drafting, analysis, calculation, and summarization tasks; the server worker processes queued tasks and stores their status and result in Supabase. This first version does not control browsers or devices, edit repositories, or perform external actions. Review task output before using it. The worker runs inside the web-service process and is not guaranteed to run continuously on Render Free while the service is asleep.
