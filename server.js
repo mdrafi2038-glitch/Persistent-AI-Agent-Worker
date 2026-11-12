@@ -87,7 +87,10 @@ app.get("/api/status", (_req, res) => {
     configuration: {
       password: Boolean(APP_PASSWORD && APP_PASSWORD !== "change-this-to-a-long-random-password"),
       sessionSecret: SESSION_SECRET.length >= 32,
-      aiKey: AI_PROVIDER === "anthropic" ? Boolean(process.env.ANTHROPIC_API_KEY) : Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL)
+      aiKey: AI_PROVIDER === "anthropic" ? Boolean(process.env.ANTHROPIC_API_KEY) : Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL),
+      webSearch: Boolean(process.env.TAVILY_API_KEY),
+      github: Boolean(process.env.GITHUB_TOKEN),
+      autonomousTools: true
     }
   });
 });
