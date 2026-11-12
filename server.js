@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { createClient } = require("@supabase/supabase-js");
 const { registerAgentWorker } = require("./agent-worker");
+const { executeAgentTask } = require("./agent-runtime");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -398,19 +399,7 @@ registerAgentWorker({
   app,
   supabase,
   requireAuth,
-  executeTask: async (description, title) => {
-    const system = "You are the task execution engine for a private personal AI worker. Complete reasoning, drafting, analysis, calculations, and summarization tasks directly. Do not claim to browse websites, control devices, change accounts, run code, deploy software, or perform external actions because no such tools are connected in this v1. If the request requires an external action, clearly explain what is missing and provide the next safe step. Structure substantial answers with a short plan, work/result, and any remaining human action.";
-    if (AI_PROVIDER === "anthropic") {
-      return requestAnthropic([{ role: "user", content: system + "\n\nTask title: " + title + "\nTask instructions: " + description }]);
-    }
-    const models = await fetchCompatibleModels();
-    const model = process.env.AI_MODEL && models.includes(process.env.AI_MODEL) ? process.env.AI_MODEL : models[0];
-    if (!model) throw new Error("No available AI model was returned by the provider.");
-    return requestCompatible([
-      { role: "system", content: system },
-      { role: "user", content: "Task title: " + title + "\nTask instructions: " + description }
-    ], model);
-  }
+  executeTask: (description, title, taskId) => executeAgentTask({ description, title, taskId })
 });
 
 app.listen(PORT, "0.0.0.0", () => {
