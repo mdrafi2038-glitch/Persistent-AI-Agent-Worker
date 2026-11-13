@@ -13,6 +13,8 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const APP_PASSWORD = process.env.APP_PASSWORD || "";
 const SESSION_SECRET = process.env.SESSION_SECRET || "";
 const AI_PROVIDER = (process.env.AI_PROVIDER || "anthropic").toLowerCase();
+const OPENROUTER_BASE_URL = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\\/+$/, "");
+const OPENROUTER_READY = Boolean(process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL);
 const MAX_OUTPUT_TOKENS = Math.min(4000, Math.max(100, Number(process.env.MAX_OUTPUT_TOKENS || 1200)));
 
 const supabaseReady = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -88,6 +90,7 @@ app.get("/api/status", (_req, res) => {
       password: Boolean(APP_PASSWORD && APP_PASSWORD !== "change-this-to-a-long-random-password"),
       sessionSecret: SESSION_SECRET.length >= 32,
       aiKey: AI_PROVIDER === "anthropic" ? Boolean(process.env.ANTHROPIC_API_KEY) : Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL),
+      openRouterFallback: OPENROUTER_READY,
       webSearch: Boolean(process.env.TAVILY_API_KEY),
       github: Boolean(process.env.GITHUB_TOKEN),
       autonomousTools: true
@@ -207,7 +210,7 @@ async function requestCompatible(messages, model, onDelta = null) {
   const streaming = typeof onDelta === "function";
   const response = await fetch(base + "/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${process.env.AI_API_KEY}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, messages, max_tokens: MAX_OUTPUT_TOKENS, stream: streaming }),
     signal: AbortSignal.timeout(90_000)
   });
@@ -377,13 +380,22 @@ app.post("/api/chat", requireAuth, async (req, res) => {
         }
       }
       let lastError;
-      for (const model of candidates) {
+      let streamedAny = false;
+      const providers = [{ name: "primary", model: candidates[0], apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL }];
+      if (OPENROUTER_READY) providers.push({ name: "openrouter-fallback", model: process.env.OPENROUTER_MODEL, apiKey: process.env.OPENROUTER_API_KEY, baseUrl: OPENROUTER_BASE_URL });
+      for (const provider of providers) {
+        if (!provider.model) continue;
         try {
-          answer = await requestCompatible(messages, model, streamRequested ? (delta => sendStreamEvent({ delta })) : null);
+          answer = await requestCompatible(messages, provider.model, streamRequested ? (delta => { streamedAny = true; sendStreamEvent({ delta }); }) : null, provider);
           if (answer) break;
           throw new Error("The provider returned an empty response.");
         }
-        catch (error) { lastError = error; console.warn("Model attempt failed (" + model + "): " + error.message); }
+        catch (error) {
+          lastError = error;
+          console.warn("Provider attempt failed (" + provider.name + "/" + provider.model + "): " + error.message);
+          // Once stream content has reached the client, retrying another model would duplicate text.
+          if (streamedAny) break;
+        }
       }
       if (!answer) throw new Error(lastError?.message || "No available model could answer this request.");
     }
