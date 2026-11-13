@@ -275,22 +275,24 @@ async function fetchOpenRouterModels() {
   const response = await fetch(OPENROUTER_BASE_URL + "/models", { headers: { authorization: "Bearer " + process.env.OPENROUTER_API_KEY }, signal: AbortSignal.timeout(30000) });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error?.message || `OpenRouter model list failed (HTTP ${response.status})`);
-  return [...new Set((Array.isArray(body.data) ? body.data : []).map(item => String(item.id || "")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const records = Array.isArray(body.data) ? body.data : [];
+  const isFree = item => {
+    const id = String(item?.id || "");
+    if (/:free$/i.test(id)) return true;
+    const pricing = item?.pricing || {};
+    const prompt = Number(pricing.prompt), completion = Number(pricing.completion);
+    if (!Number.isFinite(prompt) || !Number.isFinite(completion) || prompt !== 0 || completion !== 0) return false;
+    return ["request", "image"].every(key => pricing[key] == null || Number(pricing[key]) === 0);
+  };
+  return [...new Set(records.filter(isFree).map(item => String(item.id || "")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 }
 app.get("/api/models", requireAuth, async (_req, res) => {
   const models = [], errors = [];
-  if (AI_PROVIDER !== "anthropic" && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
-    try { for (const id of await fetchCompatibleModels()) models.push({ id, provider: "primary", label: id + " · Primary" }); }
-    catch (error) { errors.push("Primary: " + error.message); }
-  } else if (AI_PROVIDER === "anthropic" && process.env.ANTHROPIC_API_KEY) {
-    const id = process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest";
-    models.push({ id, provider: "anthropic", label: id + " · Anthropic" });
-  }
   if (process.env.OPENROUTER_API_KEY) {
-    try { for (const id of await fetchOpenRouterModels()) models.push({ id, provider: "openrouter", label: id + " · OpenRouter" }); }
+    try { for (const id of await fetchOpenRouterModels()) models.push({ id, provider: "openrouter", label: id + " · Free" }); }
     catch (error) { errors.push("OpenRouter: " + error.message); }
   }
-  res.json({ models, preferred: { provider: "primary", id: process.env.AI_MODEL || "" }, automatic: { primary: Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL), openRouter: OPENROUTER_READY }, warning: models.length ? "" : (errors.join(" | ") || "No configured model providers.") });
+  res.json({ models, preferred: { provider: "openrouter", id: "" }, automatic: { primary: Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL), openRouter: OPENROUTER_READY }, warning: models.length ? "" : (errors.join(" | ") || "No free OpenRouter models are currently available.") });
 });
 
 function parseStoredMessage(item) {
