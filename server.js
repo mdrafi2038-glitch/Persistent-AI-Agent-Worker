@@ -13,7 +13,7 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const APP_PASSWORD = process.env.APP_PASSWORD || "";
 const SESSION_SECRET = process.env.SESSION_SECRET || "";
 const AI_PROVIDER = (process.env.AI_PROVIDER || "anthropic").toLowerCase();
-const OPENROUTER_BASE_URL = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\\/+$/, "");
+const OPENROUTER_BASE_URL = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
 const OPENROUTER_READY = Boolean(process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL);
 const MAX_OUTPUT_TOKENS = Math.min(4000, Math.max(100, Number(process.env.MAX_OUTPUT_TOKENS || 1200)));
 
