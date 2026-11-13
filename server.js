@@ -15,6 +15,8 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "";
 const AI_PROVIDER = (process.env.AI_PROVIDER || "anthropic").toLowerCase();
 const OPENROUTER_BASE_URL = (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
 const OPENROUTER_READY = Boolean(process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_MODEL);
+// Publicly documented HCSN free-tier model IDs. Paid/SVIP models are deliberately excluded.
+const HCNSEC_FREE_MODEL_IDS = new Set(["deepseek-v4-pro", "kimi-k3", "step-3.7-flash"]);
 const MAX_OUTPUT_TOKENS = Math.min(4000, Math.max(100, Number(process.env.MAX_OUTPUT_TOKENS || 1200)));
 
 const supabaseReady = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -270,6 +272,15 @@ async function fetchCompatibleModels() {
   if (!models.length) throw new Error("Provider returned no model IDs.");
   return [...new Set(models)].sort((a, b) => a.localeCompare(b));
 }
+function isHcnsecProvider() {
+  try { return new URL(process.env.AI_BASE_URL || "").hostname.toLowerCase() === "api.hcnsec.cn"; }
+  catch { return false; }
+}
+async function fetchHcnsecFreeModels() {
+  if (!isHcnsecProvider()) return [];
+  const available = await fetchCompatibleModels();
+  return available.filter(id => HCNSEC_FREE_MODEL_IDS.has(id.toLowerCase()));
+}
 async function fetchOpenRouterModels() {
   if (!process.env.OPENROUTER_API_KEY) return [];
   const response = await fetch(OPENROUTER_BASE_URL + "/models", { headers: { authorization: "Bearer " + process.env.OPENROUTER_API_KEY }, signal: AbortSignal.timeout(30000) });
@@ -288,11 +299,15 @@ async function fetchOpenRouterModels() {
 }
 app.get("/api/models", requireAuth, async (_req, res) => {
   const models = [], errors = [];
+  if (isHcnsecProvider() && process.env.AI_API_KEY) {
+    try { for (const id of await fetchHcnsecFreeModels()) models.push({ id, provider: "primary", label: id + " · HCSN Free" }); }
+    catch (error) { errors.push("HCSN: " + error.message); }
+  }
   if (process.env.OPENROUTER_API_KEY) {
-    try { for (const id of await fetchOpenRouterModels()) models.push({ id, provider: "openrouter", label: id + " · Free" }); }
+    try { for (const id of await fetchOpenRouterModels()) models.push({ id, provider: "openrouter", label: id + " · OpenRouter Free" }); }
     catch (error) { errors.push("OpenRouter: " + error.message); }
   }
-  res.json({ models, preferred: { provider: "openrouter", id: "" }, automatic: { primary: Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL), openRouter: OPENROUTER_READY }, warning: models.length ? "" : (errors.join(" | ") || "No free OpenRouter models are currently available.") });
+  res.json({ models, preferred: { provider: "primary", id: "" }, automatic: { primary: Boolean(isHcnsecProvider() && process.env.AI_API_KEY && process.env.AI_BASE_URL), openRouter: OPENROUTER_READY }, warning: models.length ? "" : (errors.join(" | ") || "No free HCSN or OpenRouter models are currently available.") });
 });
 
 function parseStoredMessage(item) {
@@ -389,15 +404,19 @@ app.post("/api/chat", requireAuth, async (req, res) => {
           if (modelId !== (process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest")) return res.status(400).json({ error: "Choose the configured Anthropic model." });
           answer = await requestAnthropic(messages);
         } else {
-          const available = await fetchCompatibleModels();
-          if (!available.includes(modelId)) return res.status(400).json({ error: "Choose a primary model from the current model list." });
+          const available = isHcnsecProvider() ? await fetchHcnsecFreeModels() : await fetchCompatibleModels();
+          if (!available.includes(modelId)) return res.status(400).json({ error: isHcnsecProvider() ? "Choose an available HCSN free model from the current model list." : "Choose a primary model from the current model list." });
           providers = [{ name: "primary", model: modelId, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL }];
         }
       } else if (AI_PROVIDER === "anthropic") {
         providers = [{ name: "anthropic", model: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest" }];
       } else {
         const preferred = String(process.env.AI_MODEL || "").trim();
-        if (preferred && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+        if (isHcnsecProvider() && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+          const freeModels = await fetchHcnsecFreeModels();
+          const selected = freeModels.includes(preferred) ? preferred : freeModels[0];
+          if (selected) providers.push({ name: "primary", model: selected, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+        } else if (preferred && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
           providers.push({ name: "primary", model: preferred, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
         } else if (process.env.AI_API_KEY && process.env.AI_BASE_URL) {
           const available = await fetchCompatibleModels();
