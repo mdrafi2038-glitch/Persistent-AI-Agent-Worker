@@ -270,11 +270,27 @@ async function fetchCompatibleModels() {
   if (!models.length) throw new Error("Provider returned no model IDs.");
   return [...new Set(models)].sort((a, b) => a.localeCompare(b));
 }
+async function fetchOpenRouterModels() {
+  if (!process.env.OPENROUTER_API_KEY) return [];
+  const response = await fetch(OPENROUTER_BASE_URL + "/models", { headers: { authorization: "Bearer " + process.env.OPENROUTER_API_KEY }, signal: AbortSignal.timeout(30000) });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error?.message || `OpenRouter model list failed (HTTP ${response.status})`);
+  return [...new Set((Array.isArray(body.data) ? body.data : []).map(item => String(item.id || "")).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+}
 app.get("/api/models", requireAuth, async (_req, res) => {
-  try {
-    const models = AI_PROVIDER === "anthropic" ? [process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest"] : await fetchCompatibleModels();
-    res.json({ models, preferred: process.env.AI_MODEL || "" });
-  } catch (error) { res.status(502).json({ error: error.message || "Could not load models." }); }
+  const models = [], errors = [];
+  if (AI_PROVIDER !== "anthropic" && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+    try { for (const id of await fetchCompatibleModels()) models.push({ id, provider: "primary", label: id + " · Primary" }); }
+    catch (error) { errors.push("Primary: " + error.message); }
+  } else if (AI_PROVIDER === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+    const id = process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest";
+    models.push({ id, provider: "anthropic", label: id + " · Anthropic" });
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    try { for (const id of await fetchOpenRouterModels()) models.push({ id, provider: "openrouter", label: id + " · OpenRouter" }); }
+    catch (error) { errors.push("OpenRouter: " + error.message); }
+  }
+  res.json({ models, preferred: { provider: "primary", id: process.env.AI_MODEL || "" }, automatic: { primary: Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL), openRouter: OPENROUTER_READY }, warning: models.length ? "" : (errors.join(" | ") || "No configured model providers.") });
 });
 
 function parseStoredMessage(item) {
@@ -357,46 +373,53 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     } else {
       const mode = req.body?.modelMode === "manual" ? "manual" : "auto";
       const requestedModel = String(req.body?.model || "").trim();
-      let candidates;
+      let providers = [];
       if (mode === "manual") {
-        const available = await fetchCompatibleModels();
-        if (!requestedModel || !available.includes(requestedModel)) return res.status(400).json({ error: "Choose a model from the current provider model list." });
-        candidates = [requestedModel];
-      } else {
-        // Avoid an extra /models round-trip on every chat. Use the configured model directly.
-        const preferred = String(process.env.AI_MODEL || "").trim();
-        const maxAttempts = Math.min(3, Math.max(1, Number(process.env.AI_MAX_MODEL_ATTEMPTS || 1)));
-        if (preferred) {
-          candidates = [preferred];
-          // Extra fallback attempts are opt-in because sequential retries make every answer slower.
-          if (maxAttempts > 1) {
-            const available = await fetchCompatibleModels();
-            candidates.push(...available.filter(id => id !== preferred).slice(0, maxAttempts - 1));
-          }
+        const separator = requestedModel.indexOf("::");
+        const providerName = separator > 0 ? requestedModel.slice(0, separator) : "primary";
+        const modelId = separator > 0 ? requestedModel.slice(separator + 2) : requestedModel;
+        if (!modelId) return res.status(400).json({ error: "Choose a model first." });
+        if (providerName === "openrouter") {
+          const available = await fetchOpenRouterModels();
+          if (!available.includes(modelId)) return res.status(400).json({ error: "That OpenRouter model is not in the current model list. Refresh and choose again." });
+          providers = [{ name: "openrouter", model: modelId, apiKey: process.env.OPENROUTER_API_KEY, baseUrl: OPENROUTER_BASE_URL }];
+        } else if (providerName === "anthropic" && AI_PROVIDER === "anthropic") {
+          if (modelId !== (process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest")) return res.status(400).json({ error: "Choose the configured Anthropic model." });
+          answer = await requestAnthropic(messages);
         } else {
           const available = await fetchCompatibleModels();
-          candidates = available.slice(0, 1);
+          if (!available.includes(modelId)) return res.status(400).json({ error: "Choose a primary model from the current model list." });
+          providers = [{ name: "primary", model: modelId, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL }];
         }
+      } else if (AI_PROVIDER === "anthropic") {
+        providers = [{ name: "anthropic", model: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest" }];
+      } else {
+        const preferred = String(process.env.AI_MODEL || "").trim();
+        if (preferred && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+          providers.push({ name: "primary", model: preferred, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+        } else if (process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+          const available = await fetchCompatibleModels();
+          if (available[0]) providers.push({ name: "primary", model: available[0], apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+        }
+        if (OPENROUTER_READY) providers.push({ name: "openrouter", model: process.env.OPENROUTER_MODEL, apiKey: process.env.OPENROUTER_API_KEY, baseUrl: OPENROUTER_BASE_URL });
       }
       let lastError;
       let streamedAny = false;
-      const providers = [{ name: "primary", model: candidates[0], apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL }];
-      if (OPENROUTER_READY) providers.push({ name: "openrouter-fallback", model: process.env.OPENROUTER_MODEL, apiKey: process.env.OPENROUTER_API_KEY, baseUrl: OPENROUTER_BASE_URL });
       for (const provider of providers) {
         if (!provider.model) continue;
         try {
-          answer = await requestCompatible(messages, provider.model, streamRequested ? (delta => { streamedAny = true; sendStreamEvent({ delta }); }) : null, provider);
+          answer = provider.name === "anthropic"
+            ? await requestAnthropic(messages)
+            : await requestCompatible(messages, provider.model, streamRequested ? (delta => { streamedAny = true; sendStreamEvent({ delta }); }) : null, provider);
           if (answer) break;
           throw new Error("The provider returned an empty response.");
-        }
-        catch (error) {
+        } catch (error) {
           lastError = error;
           console.warn("Provider attempt failed (" + provider.name + "/" + provider.model + "): " + error.message);
-          // Once stream content has reached the client, retrying another model would duplicate text.
           if (streamedAny) break;
         }
       }
-      if (!answer) throw new Error(lastError?.message || "No available model could answer this request.");
+      if (!answer) throw new Error(lastError?.message || "No configured model could answer this request.");
     }
     if (!answer) throw new Error("The AI provider returned an empty response.");
     await persistMessage(sessionId, "assistant", answer);
