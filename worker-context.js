@@ -1,4 +1,4 @@
-const CONFIG_QUESTION = /(?:provider|model(?:s| id)?|auto\s*mode|manual\s*mode|routing|configuration|config|/api\/models|/api\/status|কোন\s*মডেল|মডেলগুলোর|মডেল\s*আইডি|প্রোভাইডার|অটো\s*মোড|ম্যানুয়াল\s*মোড|কনফিগারেশন|রাউটিং)/i;
+const CONFIG_QUESTION = /(?:provider|model(?:s| id)?|auto\s*mode|manual\s*mode|routing|configuration|config|\/api\/models|\/api\/status|কোন\s*মডেল|মডেলগুলোর|মডেল\s*আইডি|প্রোভাইডার|অটো\s*মোড|ম্যানুয়াল\s*মোড|কনফিগারেশন|রাউটিং)/i;
 
 function isWorkerInfoRequest(message) {
   return CONFIG_QUESTION.test(String(message || ""));
