@@ -202,21 +202,21 @@ async function requestAnthropic(messages) {
   return (body.content || []).filter(x => x.type === "text").map(x => x.text).join("\n").trim();
 }
 
-async function requestCompatible(messages, model, onDelta = null) {
-  if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL || !model) {
-    throw new Error("Set AI_BASE_URL and AI_API_KEY, and select an available model.");
-  }
-  const base = process.env.AI_BASE_URL.replace(/\/+$/, "");
+async function requestCompatible(messages, model, onDelta = null, provider = null) {
+  const apiKey = provider?.apiKey || process.env.AI_API_KEY;
+  const baseUrl = provider?.baseUrl || process.env.AI_BASE_URL;
+  if (!apiKey || !baseUrl || !model) throw new Error("Set the provider API key, base URL, and model.");
+  const base = baseUrl.replace(/\/+$/, "");
   const streaming = typeof onDelta === "function";
   const response = await fetch(base + "/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    headers: { "content-type": "application/json", authorization: "Bearer " + apiKey },
     body: JSON.stringify({ model, messages, max_tokens: MAX_OUTPUT_TOKENS, stream: streaming }),
     signal: AbortSignal.timeout(90_000)
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error?.message || `AI gateway returned HTTP ${response.status}`);
+    throw new Error(body.error?.message || "AI gateway returned HTTP " + response.status);
   }
   if (!streaming) {
     const body = await response.json().catch(() => ({}));
@@ -256,7 +256,6 @@ async function requestCompatible(messages, model, onDelta = null) {
   }
   return answer.trim();
 }
-
 
 async function fetchCompatibleModels() {
   if (!process.env.AI_API_KEY || !process.env.AI_BASE_URL) throw new Error("Set AI_BASE_URL and AI_API_KEY first.");
