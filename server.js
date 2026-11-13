@@ -454,23 +454,73 @@ app.post("/api/chat", requireAuth, async (req, res) => {
         });
         messages.unshift({ role: "system", content: workerContext });
       }
+      const traceId = crypto.randomUUID();
       let lastError;
       let streamedAny = false;
+      let successfulProvider = null;
       for (const provider of providers) {
         if (!provider.model) continue;
+        const attemptStartedAt = Date.now();
+        console.info("provider_attempt_started " + JSON.stringify({
+          event: "provider_attempt_started",
+          traceId,
+          mode,
+          provider: provider.name,
+          model: provider.model,
+          streaming: streamRequested
+        }));
         try {
           answer = provider.name === "anthropic"
             ? await requestAnthropic(messages)
             : await requestCompatible(messages, provider.model, streamRequested ? (delta => { streamedAny = true; sendStreamEvent({ delta }); }) : null, provider);
-          if (answer) break;
-          throw new Error("The provider returned an empty response.");
+          if (!answer) throw new Error("The provider returned an empty response.");
+          successfulProvider = provider;
+          console.info("provider_attempt_succeeded " + JSON.stringify({
+            event: "provider_attempt_succeeded",
+            traceId,
+            mode,
+            provider: provider.name,
+            model: provider.model,
+            elapsedMs: Date.now() - attemptStartedAt,
+            streaming: streamRequested
+          }));
+          break;
         } catch (error) {
           lastError = error;
-          console.warn("Provider attempt failed (" + provider.name + "/" + provider.model + "): " + error.message);
+          const safeError = String(error.message || "unknown provider error")
+            .replace(/(Bearer\\s+)[^\\s]+/gi, "$1[redacted]")
+            .slice(0, 500);
+          console.warn("provider_attempt_failed " + JSON.stringify({
+            event: "provider_attempt_failed",
+            traceId,
+            mode,
+            provider: provider.name,
+            model: provider.model,
+            elapsedMs: Date.now() - attemptStartedAt,
+            error: safeError,
+            streaming: streamRequested
+          }));
           if (streamedAny) break;
         }
       }
-      if (!answer) throw new Error(lastError?.message || "No configured model could answer this request.");
+      if (!answer) {
+        console.warn("chat_provider_result " + JSON.stringify({
+          event: "chat_provider_result",
+          traceId,
+          mode,
+          outcome: "failed",
+          lastProvider: providers[providers.length - 1]?.name || null
+        }));
+        throw new Error(lastError?.message || "No configured model could answer this request.");
+      }
+      console.info("chat_provider_result " + JSON.stringify({
+        event: "chat_provider_result",
+        traceId,
+        mode,
+        outcome: "success",
+        provider: successfulProvider?.name || "unknown",
+        model: successfulProvider?.model || "unknown"
+      }));
     }
     if (!answer) throw new Error("The AI provider returned an empty response.");
     await persistMessage(sessionId, "assistant", answer);
