@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check agent-worker.js && node --check agent-runtime.js"
+    "check": "node --check server.js && node --check agent-worker.js && node --check agent-runtime.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
