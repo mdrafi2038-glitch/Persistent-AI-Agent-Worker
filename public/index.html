@@ -239,37 +239,74 @@ function closeSidebar(){ $("sidebar").classList.remove("open");$("sidebarBackdro
 function toggleSidebar(){const open=$("sidebar").classList.toggle("open");$("sidebarBackdrop").classList.toggle("visible",open);$("menuToggle").setAttribute("aria-expanded",String(open));}
 function renderPending(){const strip=$("attachmentStrip");strip.innerHTML="";pendingFiles.forEach((file,i)=>{const chip=document.createElement("div");chip.className="file-chip";if(file.type.startsWith("image/")){const img=document.createElement("img");img.src=URL.createObjectURL(file);chip.appendChild(img);}const name=document.createElement("span");name.textContent=file.name;chip.appendChild(name);const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label","Remove "+file.name);remove.addEventListener("click",()=>{pendingFiles.splice(i,1);renderPending();});chip.appendChild(remove);strip.appendChild(chip);});}
 function fileData(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,type:file.type||"application/octet-stream",data:reader.result});reader.onerror=()=>reject(new Error("Could not read "+file.name));reader.readAsDataURL(file);});}
-let speechRecognition=null,listening=false;
+let speechRecognition=null,listening=false,voiceStopRequested=false,voiceRetryCount=0,voiceFinalText="",voiceInterimText="";
 function setListening(value){listening=value;const button=$("voiceButton");button.classList.toggle("listening",value);button.textContent=value?"■":"🎙";button.title=value?"Stop voice input":"Voice input";button.setAttribute("aria-label",value?"Stop voice input":"Start voice input");}
-function toggleVoiceInput(){
- const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
- if(!SpeechRecognition){$("chatError").textContent="এই ব্রাউজারে Voice typing support নেই। Chrome-এর microphone permission দিয়ে আবার চেষ্টা করুন।";return;}
- if(listening){speechRecognition?.stop();return;}
+function updateVoiceText(){
+ const existing=$("message").value.trim();
+ const recognized=voiceFinalText||voiceInterimText;
+ $("message").value=existing&&recognized?existing+" "+recognized:existing||recognized;
+ $("message").style.height="auto";
+ $("message").style.height=Math.min($("message").scrollHeight,180)+"px";
+}
+function startVoiceRecognition(SpeechRecognition){
  try{
   speechRecognition=new SpeechRecognition();
   speechRecognition.lang=$("voiceLanguage").value;
   speechRecognition.continuous=false;
   speechRecognition.interimResults=true;
   speechRecognition.maxAlternatives=1;
-  let finalText="";
   speechRecognition.onstart=()=>{setListening(true);$("chatError").textContent="বলুন… কথা শেষ হলে লেখা এখানে দেখা যাবে।";};
   speechRecognition.onresult=event=>{
-   let interim="";
+   voiceInterimText="";
    for(let i=event.resultIndex;i<event.results.length;i++){
     const transcript=event.results[i][0]?.transcript||"";
-    if(event.results[i].isFinal)finalText+=transcript;
-    else interim+=transcript;
+    if(event.results[i].isFinal)voiceFinalText+=transcript;
+    else voiceInterimText+=transcript;
    }
-   const existing=$("message").value.trim();
-   const prefix=existing&&finalText?" ":"";
-   $("message").value=existing+prefix+(finalText||interim);
-   $("message").style.height="auto";
-   $("message").style.height=Math.min($("message").scrollHeight,180)+"px";
+   updateVoiceText();
   };
-  speechRecognition.onerror=event=>{$("chatError").textContent=event.error==="not-allowed"?"Microphone permission দিন, তারপর আবার চেষ্টা করুন.":"Voice recognition error: "+event.error;};
-  speechRecognition.onend=()=>{setListening(false);if(finalText.trim())$("chatError").textContent="ভয়েস লেখা হয়েছে। পাঠানোর আগে দেখে নিন।";};
+  speechRecognition.onerror=event=>{
+   if(event.error==="aborted")return;
+   const messages={
+    "not-allowed":"Chrome-এর Microphone permission Allow করুন।",
+    "service-not-allowed":"Chrome-এ Google voice recognition service চালু/অনুমোদিত নেই।",
+    "audio-capture":"মাইক্রোফোন পাওয়া যাচ্ছে না। অন্য অ্যাপের mic ব্যবহার বন্ধ করে চেষ্টা করুন।",
+    "network":"Voice recognition-এর জন্য ইন্টারনেট সংযোগ পরীক্ষা করুন।",
+    "no-speech":"কোনো কথা শনাক্ত হয়নি। আবার Mic চাপুন।",
+    "language-not-supported":"এই ভাষাটি Chrome voice recognition-এ সমর্থিত নয়।"
+   };
+   $("chatError").textContent=messages[event.error]||("Voice recognition error: "+event.error);
+  };
+  speechRecognition.onend=()=>{
+   setListening(false);
+   if(voiceStopRequested){
+    voiceStopRequested=false;
+    if(voiceFinalText.trim())$("chatError").textContent="ভয়েস লেখা হয়েছে। পাঠানোর আগে দেখে নিন।";
+    return;
+   }
+   if(!voiceFinalText.trim()&&!voiceInterimText.trim()&&voiceRetryCount<1){
+    voiceRetryCount++;
+    $("chatError").textContent="Chrome voice service বন্ধ হয়েছে। আবার চেষ্টা করছি…";
+    setTimeout(()=>{
+     if(!listening&&!voiceStopRequested)startVoiceRecognition(SpeechRecognition);
+    },500);
+    return;
+   }
+   if(voiceFinalText.trim())$("chatError").textContent="ভয়েস লেখা হয়েছে। পাঠানোর আগে দেখে নিন।";
+   else if(!voiceInterimText.trim())$("chatError").textContent="Chrome voice service চালু থাকছে না। Chrome update করে, Google app-এর microphone permission দিয়ে আবার চেষ্টা করুন।";
+  };
   speechRecognition.start();
- }catch(error){setListening(false);$("chatError").textContent="Voice input শুরু করা যায়নি: "+error.message;}
+ }catch(error){
+  setListening(false);
+  $("chatError").textContent="Voice input শুরু করা যায়নি: "+error.message;
+ }
+}
+function toggleVoiceInput(){
+ const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SpeechRecognition){$("chatError").textContent="এই ব্রাউজারে Voice typing support নেই। Chrome-এর microphone permission দিয়ে আবার চেষ্টা করুন।";return;}
+ if(listening){voiceStopRequested=true;speechRecognition?.stop();return;}
+ voiceStopRequested=false;voiceRetryCount=0;voiceFinalText="";voiceInterimText="";
+ startVoiceRecognition(SpeechRecognition);
 }
 
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await api("/api/login",{method:"POST",body:JSON.stringify({password:$("password").value})});$("password").value="";showApp();await Promise.all([checkStatus(),loadModels(),loadHistory()]);}catch(err){$("loginError").textContent=err.message;}});
