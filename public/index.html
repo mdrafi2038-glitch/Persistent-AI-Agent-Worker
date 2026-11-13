@@ -131,6 +131,7 @@ body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-seri
  .hint{font-size:.64rem}
 }
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}}
+#voiceButton{font-size:1.15rem}#voiceButton.listening{background:#f3d6cc;color:#8c2e16;border-color:#d49a86}#voiceLanguage{max-width:112px;padding:7px 8px;font-size:.78rem}@media(max-width:520px){#voiceLanguage{max-width:84px;font-size:.7rem;padding:6px 4px}}
 
 
 /* Claude + ChatGPT hybrid visual refresh — additive overrides only */
@@ -211,6 +212,8 @@ html,body{background:var(--bg);color:var(--text)}
 <button type="button" id="attachButton" class="attach-btn" aria-label="Attach files" title="Attach files">＋</button>
 <input id="fileInput" type="file" accept="image/*,.pdf,.txt,.md,.csv,.json" multiple hidden>
 <textarea id="message" rows="1" maxlength="12000" placeholder="Message Persistent AI…" aria-label="Message"></textarea>
+<select id="voiceLanguage" class="select" aria-label="Voice language" title="Voice language"><option value="bn-BD">বাংলা</option><option value="en-US">English</option></select>
+<button type="button" id="voiceButton" class="attach-btn" aria-label="Start voice input" title="Voice input">🎙</button>
 <button id="send" class="send-btn" aria-label="Send message" title="Send">↑</button>
 </div></div>
 <div class="hint">Images, PDF, TXT, MD, CSV and JSON · up to 4 files · 5 MB each</div>
@@ -236,6 +239,39 @@ function closeSidebar(){ $("sidebar").classList.remove("open");$("sidebarBackdro
 function toggleSidebar(){const open=$("sidebar").classList.toggle("open");$("sidebarBackdrop").classList.toggle("visible",open);$("menuToggle").setAttribute("aria-expanded",String(open));}
 function renderPending(){const strip=$("attachmentStrip");strip.innerHTML="";pendingFiles.forEach((file,i)=>{const chip=document.createElement("div");chip.className="file-chip";if(file.type.startsWith("image/")){const img=document.createElement("img");img.src=URL.createObjectURL(file);chip.appendChild(img);}const name=document.createElement("span");name.textContent=file.name;chip.appendChild(name);const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label","Remove "+file.name);remove.addEventListener("click",()=>{pendingFiles.splice(i,1);renderPending();});chip.appendChild(remove);strip.appendChild(chip);});}
 function fileData(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve({name:file.name,type:file.type||"application/octet-stream",data:reader.result});reader.onerror=()=>reject(new Error("Could not read "+file.name));reader.readAsDataURL(file);});}
+let speechRecognition=null,listening=false;
+function setListening(value){listening=value;const button=$("voiceButton");button.classList.toggle("listening",value);button.textContent=value?"■":"🎙";button.title=value?"Stop voice input":"Voice input";button.setAttribute("aria-label",value?"Stop voice input":"Start voice input");}
+function toggleVoiceInput(){
+ const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SpeechRecognition){$("chatError").textContent="এই ব্রাউজারে Voice typing support নেই। Chrome-এর microphone permission দিয়ে আবার চেষ্টা করুন।";return;}
+ if(listening){speechRecognition?.stop();return;}
+ try{
+  speechRecognition=new SpeechRecognition();
+  speechRecognition.lang=$("voiceLanguage").value;
+  speechRecognition.continuous=false;
+  speechRecognition.interimResults=true;
+  speechRecognition.maxAlternatives=1;
+  let finalText="";
+  speechRecognition.onstart=()=>{setListening(true);$("chatError").textContent="বলুন… কথা শেষ হলে লেখা এখানে দেখা যাবে।";};
+  speechRecognition.onresult=event=>{
+   let interim="";
+   for(let i=event.resultIndex;i<event.results.length;i++){
+    const transcript=event.results[i][0]?.transcript||"";
+    if(event.results[i].isFinal)finalText+=transcript;
+    else interim+=transcript;
+   }
+   const existing=$("message").value.trim();
+   const prefix=existing&&finalText?" ":"";
+   $("message").value=existing+prefix+(finalText||interim);
+   $("message").style.height="auto";
+   $("message").style.height=Math.min($("message").scrollHeight,180)+"px";
+  };
+  speechRecognition.onerror=event=>{$("chatError").textContent=event.error==="not-allowed"?"Microphone permission দিন, তারপর আবার চেষ্টা করুন.":"Voice recognition error: "+event.error;};
+  speechRecognition.onend=()=>{setListening(false);if(finalText.trim())$("chatError").textContent="ভয়েস লেখা হয়েছে। পাঠানোর আগে দেখে নিন।";};
+  speechRecognition.start();
+ }catch(error){setListening(false);$("chatError").textContent="Voice input শুরু করা যায়নি: "+error.message;}
+}
+
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await api("/api/login",{method:"POST",body:JSON.stringify({password:$("password").value})});$("password").value="";showApp();await Promise.all([checkStatus(),loadModels(),loadHistory()]);}catch(err){$("loginError").textContent=err.message;}});
 async function logout(){await api("/api/logout",{method:"POST"}).catch(()=>{});$("app").hidden=true;$("login").hidden=false;welcome();$("historyList").innerHTML="";}
 $("logout").addEventListener("click",logout);$("mobileLogout").addEventListener("click",logout);
@@ -243,6 +279,7 @@ $("modelMode").addEventListener("change",()=>{$("modelChoice").hidden=$("modelMo
 $("menuToggle").addEventListener("click",toggleSidebar);$("sidebarBackdrop").addEventListener("click",closeSidebar);
 $("newChat").addEventListener("click",()=>{closeSidebar();sessionId=crypto.randomUUID();welcome();$("chatError").textContent="";pendingFiles=[];renderPending();loadHistory().catch(()=>{});});
 $("attachButton").addEventListener("click",()=>$("fileInput").click());
+$("voiceButton").addEventListener("click",toggleVoiceInput);
 $("fileInput").addEventListener("change",e=>{const selected=[...e.target.files];for(const f of selected){if(pendingFiles.length>=4)break;if(f.size>5*1024*1024){$("chatError").textContent=f.name+" is larger than 5 MB.";continue;}pendingFiles.push(f);}renderPending();e.target.value="";});
 $("chatForm").addEventListener("submit",async e=>{
  e.preventDefault();if(busy)return;
