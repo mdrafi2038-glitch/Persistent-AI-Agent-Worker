@@ -355,12 +355,27 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     } else {
       const mode = req.body?.modelMode === "manual" ? "manual" : "auto";
       const requestedModel = String(req.body?.model || "").trim();
-      const available = await fetchCompatibleModels();
       let candidates;
       if (mode === "manual") {
+        const available = await fetchCompatibleModels();
         if (!requestedModel || !available.includes(requestedModel)) return res.status(400).json({ error: "Choose a model from the current provider model list." });
         candidates = [requestedModel];
-      } else candidates = [...(process.env.AI_MODEL && available.includes(process.env.AI_MODEL) ? [process.env.AI_MODEL] : []), ...available.filter(id => id !== process.env.AI_MODEL)].slice(0, 8);
+      } else {
+        // Avoid an extra /models round-trip on every chat. Use the configured model directly.
+        const preferred = String(process.env.AI_MODEL || "").trim();
+        const maxAttempts = Math.min(3, Math.max(1, Number(process.env.AI_MAX_MODEL_ATTEMPTS || 1)));
+        if (preferred) {
+          candidates = [preferred];
+          // Extra fallback attempts are opt-in because sequential retries make every answer slower.
+          if (maxAttempts > 1) {
+            const available = await fetchCompatibleModels();
+            candidates.push(...available.filter(id => id !== preferred).slice(0, maxAttempts - 1));
+          }
+        } else {
+          const available = await fetchCompatibleModels();
+          candidates = available.slice(0, 1);
+        }
+      }
       let lastError;
       for (const model of candidates) {
         try {
