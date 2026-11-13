@@ -5,6 +5,7 @@ const rateLimit = require("express-rate-limit");
 const { createClient } = require("@supabase/supabase-js");
 const { registerAgentWorker } = require("./agent-worker");
 const { executeAgentTask } = require("./agent-runtime");
+const { isWorkerInfoRequest, buildWorkerContext } = require("./worker-context");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -183,7 +184,7 @@ async function persistMessage(sessionId, role, content) {
   }
 }
 
-async function requestAnthropic(messages) {
+async function requestAnthropic(messages, system = "") {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("Missing ANTHROPIC_API_KEY.");
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -195,6 +196,7 @@ async function requestAnthropic(messages) {
     body: JSON.stringify({
       model: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest",
       max_tokens: MAX_OUTPUT_TOKENS,
+      ...(system ? { system } : {}),
       messages: messages.map(m => ({ role: m.role, content: m.content }))
     }),
     signal: AbortSignal.timeout(90_000)
@@ -384,9 +386,11 @@ app.post("/api/chat", requireAuth, async (req, res) => {
     }
     const sendStreamEvent = event => { if (streamRequested && !res.writableEnded) res.write("data: " + JSON.stringify(event) + "\n\n"); };
     let answer;
+    const wantsWorkerInfo = isWorkerInfoRequest(content);
     if (AI_PROVIDER === "anthropic") {
       if (imageParts.length) throw new Error("Image understanding is currently supported through the OpenAI-compatible provider only.");
-      answer = await requestAnthropic(messages);
+      const workerContext = wantsWorkerInfo ? buildWorkerContext({ provider: "anthropic", mode: "auto", candidates: [{ provider: "anthropic", model: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest" }], availableModels: [{ provider: "anthropic", id: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest" }], primaryAvailable: true, fallbackAvailable: false }) : "";
+      answer = await requestAnthropic(messages, workerContext);
     } else {
       const mode = req.body?.modelMode === "manual" ? "manual" : "auto";
       const requestedModel = String(req.body?.model || "").trim();
@@ -427,6 +431,28 @@ app.post("/api/chat", requireAuth, async (req, res) => {
           if (available[0]) providers.push({ name: "primary", model: available[0], apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
         }
         if (OPENROUTER_READY) providers.push({ name: "openrouter", model: process.env.OPENROUTER_MODEL, apiKey: process.env.OPENROUTER_API_KEY, baseUrl: OPENROUTER_BASE_URL });
+      }
+      if (wantsWorkerInfo) {
+        const [primaryResult, openRouterResult] = await Promise.allSettled([
+          isHcnsecProvider() ? fetchHcnsecFreeModels() : Promise.resolve([]),
+          fetchOpenRouterModels()
+        ]);
+        const availableModels = [];
+        if (primaryResult.status === "fulfilled") {
+          for (const id of primaryResult.value) availableModels.push({ provider: "primary", id });
+        }
+        if (openRouterResult.status === "fulfilled") {
+          for (const id of openRouterResult.value) availableModels.push({ provider: "openrouter", id });
+        }
+        const workerContext = buildWorkerContext({
+          provider: isHcnsecProvider() ? "HCSN (OpenAI-compatible)" : AI_PROVIDER,
+          mode,
+          candidates: providers.map(item => ({ provider: item.name, model: item.model })),
+          availableModels,
+          primaryAvailable: Boolean(process.env.AI_API_KEY && process.env.AI_BASE_URL),
+          fallbackAvailable: OPENROUTER_READY
+        });
+        messages.unshift({ role: "system", content: workerContext });
       }
       let lastError;
       let streamedAny = false;
