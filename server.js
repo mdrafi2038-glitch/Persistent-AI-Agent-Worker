@@ -413,9 +413,13 @@ app.post("/api/chat", requireAuth, async (req, res) => {
       } else {
         const preferred = String(process.env.AI_MODEL || "").trim();
         if (isHcnsecProvider() && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
-          const freeModels = await fetchHcnsecFreeModels();
-          const selected = freeModels.includes(preferred) ? preferred : freeModels[0];
-          if (selected) providers.push({ name: "primary", model: selected, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+          try {
+            const freeModels = await fetchHcnsecFreeModels();
+            const selected = freeModels.includes(preferred) ? preferred : freeModels[0];
+            if (selected) providers.push({ name: "primary", model: selected, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+          } catch (error) {
+            console.warn("HCSN free-model discovery failed; continuing to OpenRouter fallback:", error.message);
+          }
         } else if (preferred && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
           providers.push({ name: "primary", model: preferred, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
         } else if (process.env.AI_API_KEY && process.env.AI_BASE_URL) {
