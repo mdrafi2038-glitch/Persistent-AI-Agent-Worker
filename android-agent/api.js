@@ -133,14 +133,14 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
 
   app.post(base + "/:id/plan", async (req, res) => {
     if (!requireDb(res)) return;
-    if (typeof createPlan !== "function") return res.status(503).json({ error: "AI plan generation is not configured." });
+    if (typeof generatePlan !== "function") return res.status(503).json({ error: "AI plan generation is not configured." });
     try {
       const task = await getTask(req.params.id);
       if (!task) return res.status(404).json({ error: "Task not found." });
       if (task.status !== "planning") return res.status(409).json({ error: "A plan can only be generated once while the task is planning." });
 
       let generated;
-      try { generated = await createPlan(task.instruction); }
+      try { generated = await generatePlan(task.instruction); }
       catch (error) {
         console.error("android AI planning error:", error.message);
         return res.status(502).json({ error: "The AI could not create a safe action plan. You can retry planning." });
