@@ -581,7 +581,7 @@ registerAgentWorker({
 async function generateAndroidPlan(instruction) {
   const system = [
     "Convert the user's instruction into a safe, visible Android UI action plan.",
-    "Return ONLY valid JSON in this exact shape: {\\"steps\\":[{\\"type\\":string,\\"explanation\\":string,...}]}",
+    'Return ONLY valid JSON in this exact shape: {"steps":[{"type":"string","explanation":"string"}]}',
     "Allowed types and fields:",
     "- launch_app: packageName must be com.google.android.youtube",
     "- find_visible_text: text",
@@ -592,9 +592,9 @@ async function generateAndroidPlan(instruction) {
     "- report_state: no extra fields",
     "Each step must have a short user-readable explanation. Maximum 20 steps.",
     "Never create steps for passwords, PINs, OTPs, purchases, payments, messaging, posting, deleting, account/security changes, permission grants, hidden control, shell commands, or browser automation.",
-    "If the request cannot be fulfilled using only the allowed actions, return {\\"steps\\":[{\\"type\\":\\"report_state\\",\\"explanation\\":\\"This request is outside the currently supported safe actions.\\"}]}",
+    'If the request cannot be fulfilled using only the allowed actions, return {"steps":[{"type":"report_state","explanation":"This request is outside the currently supported safe actions."}]}',
     "For YouTube search, use launch_app, find/tap the visible Search control, type_text with the user's requested query, wait_for_ui, then report_state. Do not auto-play a result."
-  ].join("\\n");
+  ].join("\n");
   const messages = [{ role: "user", content: instruction }];
   let answer = "";
   if (AI_PROVIDER === "anthropic") {
@@ -614,14 +614,13 @@ async function generateAndroidPlan(instruction) {
     if (!provider) throw new Error("No configured AI model is available to plan Android actions.");
     answer = await requestCompatible([{ role: "system", content: system }, ...messages], provider.model, null, provider);
   }
-  const cleaned = answer.trim().replace(/^\x60{3}(?:json)?\\s*/i, "").replace(/\\s*\x60{3}$/, "");
+  const cleaned = answer.trim().replace(/^\x60{3}(?:json)?\s*/i, "").replace(/\s*\x60{3}$/, "");
   let parsed;
   try { parsed = JSON.parse(cleaned); }
   catch { throw new Error("The AI planner returned invalid JSON. Please retry the command."); }
   if (!parsed || !Array.isArray(parsed.steps)) throw new Error("The AI planner did not return a valid action plan.");
   return parsed.steps;
 }
-
 registerAndroidAgent({ app, supabase, requireAuth, generatePlan: generateAndroidPlan });
 
 app.listen(PORT, "0.0.0.0", () => {
