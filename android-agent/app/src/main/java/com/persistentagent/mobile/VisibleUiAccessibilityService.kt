@@ -97,7 +97,7 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                 else if (android.os.Build.VERSION.SDK_INT < 30) callback("blocked", "This Android version does not expose the supported visible IME submit action.")
                 else {
                     val field = findEditableNode(root)
-                    val submitted = field?.performAction(AccessibilityNodeInfo.ACTION_IME_ENTER) == true
+                    val submitted = field?.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id) == true
                     callback(if (submitted) "completed" else "failed", if (submitted) "Visible search field submitted." else "Could not submit the focused search field.")
                 }
             }
