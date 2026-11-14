@@ -39,3 +39,9 @@ test("allows only the YouTube search control to be tapped", () => {
     { type: "tap_visible_node", text: "Buy", explanation: "Purchase" }
   ]), /Only the visible YouTube search control/);
 });
+
+test("accepts the bounded visible search submit action", () => {
+  assert.equal(validateSteps([
+    { type: "press_enter", explanation: "Submit the focused YouTube search field" }
+  ])[0].type, "press_enter");
+});
