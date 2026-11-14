@@ -2,6 +2,7 @@ package com.persistentagent.mobile
 
 import android.webkit.CookieManager
 import org.json.JSONObject
+import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -10,8 +11,8 @@ object AndroidTaskClient {
     private const val BASE_URL = "https://persistent-ai-agent-worker.onrender.com"
     private val executor = Executors.newSingleThreadExecutor()
 
-    fun createTask(instruction: String, callback: (Result<JSONObject>) -> Unit) =
-        request("POST", "/api/android/tasks", JSONObject().put("instruction", instruction), callback)
+    fun createTask(instruction: String, installedApps: JSONArray, callback: (Result<JSONObject>) -> Unit) =
+        request("POST", "/api/android/tasks", JSONObject().put("instruction", instruction).put("installedApps", installedApps), callback)
 
     fun approveTask(taskId: String, planHash: String, callback: (Result<JSONObject>) -> Unit) =
         request("POST", "/api/android/tasks/$taskId/approve", JSONObject().put("planHash", planHash), callback)
