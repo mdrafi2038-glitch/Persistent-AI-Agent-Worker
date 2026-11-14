@@ -67,3 +67,13 @@ Optional Render environment variables:
 Keep these credentials server-side in Render Environment. Never put them in browser code or chat messages. Use a GitHub token with the narrowest repository permissions needed (Contents: read/write; Pull requests: read/write). The agent writes only to branches named `agent/task-...`; it cannot write to the default branch, merge pull requests, deploy, delete repositories, or modify secrets/workflows/deployment configuration. Draft PRs require human review.
 
 Tool availability is shown by the authenticated `/api/status` endpoint. Browser automation, direct Android/PC control, arbitrary shell execution, and approval workflows are not included in this increment. Render Free may sleep while idle, so scheduled work is not guaranteed to run continuously.
+
+
+## Android visible UI assistance (in progress)
+
+The Worker-owned Android companion app is designed for Android 10+ across manufacturers, not for OPPO only. It uses an opt-in Accessibility service for approved, visible UI steps in normal installed apps where the app exposes accessible controls. The AI creates a typed plan, the user reviews and approves it, and the Worker dispatches one step at a time. The initial demonstration is YouTube search (search only; no automatic video selection or playback).
+
+The action allowlist blocks credential entry, payments, purchases, messaging, publishing, deletion, sharing, transfers, account/security changes, permission grants, hidden control, browser automation, and arbitrary shell/code. UI behavior varies by Android version and target app; broad device support does not mean every app or every action is guaranteed. Android 10 may not expose the same IME submit action as later versions. Physical-device testing is still required.
+
+The companion app remains separate from all other Personal Agent repositories. Device registration, browser automation, PC bridge, and voice commands remain out of scope for this increment. See `android-agent/API.md` for the API and safety boundaries.
+

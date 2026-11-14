@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check agent-worker.js && node --check agent-runtime.js && node --check worker-context.js",
+    "check": "node --check server.js && node --check agent-worker.js && node --check agent-runtime.js && node --check worker-context.js && node --check android-agent/api.js",
     "test": "node --test"
   },
   "engines": {
