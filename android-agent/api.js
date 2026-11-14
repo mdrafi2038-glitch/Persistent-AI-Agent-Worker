@@ -65,7 +65,7 @@ function validateSteps(input) {
   });
 }
 
-function registerAndroidAgent({ app, supabase, requireAuth }) {
+function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
   const base = "/api/android/tasks";
   const noStore = (_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -98,7 +98,18 @@ function registerAndroidAgent({ app, supabase, requireAuth }) {
         .insert({ instruction, status: "planning" })
         .select("id,instruction,status,created_at,updated_at").single();
       if (error) throw error;
-      return res.status(201).json({ task: data, next: "submit_plan" });
+      if (typeof generatePlan !== "function") return res.status(201).json({ task: data, next: "submit_plan" });
+      const steps = validateSteps(await generatePlan(instruction));
+      const hash = planHash(steps);
+      const { error: planError } = await supabase.from("android_agent_tasks")
+        .update({ plan: steps, plan_hash: hash, status: "pending_approval", updated_at: new Date().toISOString() })
+        .eq("id", data.id).eq("status", "planning");
+      if (planError) throw planError;
+      const { error: actionError } = await supabase.from("android_agent_actions").insert(
+        steps.map((step, index) => ({ task_id: data.id, step_index: index, action_type: step.type, payload: step, status: "queued" }))
+      );
+      if (actionError) throw actionError;
+      return res.status(201).json({ task: { ...data, status: "pending_approval" }, plan: steps, planHash: hash, next: "review_and_approve" });
     } catch (error) {
       console.error("android task create error:", error.message);
       return res.status(500).json({ error: "Could not create Android task." });
