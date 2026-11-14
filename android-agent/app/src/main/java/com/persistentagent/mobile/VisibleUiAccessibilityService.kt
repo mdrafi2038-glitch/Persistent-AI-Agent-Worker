@@ -83,9 +83,13 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                         return
                     }
                     val field = findEditableNode(root)
+                    if (field == null || !field.isFocused) {
+                        callback("blocked", "No focused visible YouTube search field is available.")
+                        return
+                    }
                     val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
-                    val changed = field?.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args) == true
-                    callback(if (changed) "completed" else "failed", if (changed) "Search text entered into the focused visible field." else "No visible editable field was available.")
+                    val changed = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                    callback(if (changed) "completed" else "failed", if (changed) "Search text entered into the focused visible field." else "Could not update the focused search field.")
                 }
             }
             "press_enter" -> {
