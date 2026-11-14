@@ -580,21 +580,23 @@ registerAgentWorker({
 
 async function generateAndroidPlan(instruction) {
   const system = [
-    "Convert the user's instruction into a safe, visible Android UI action plan.",
+    "Convert the user's instruction into a safe, visible Android UI action plan for a brand-independent Android companion app.",
     'Return ONLY valid JSON in this exact shape: {"steps":[{"type":"string","explanation":"string"}]}',
     "Allowed types and fields:",
-    "- launch_app: packageName must be com.google.android.youtube",
-    "- find_visible_text: text",
-    "- tap_visible_node: text",
-    "- type_text: text (ordinary, non-sensitive search text only)",
-    "- press_back: no extra fields",
-    "- press_enter: submit the focused visible search field",
+    "- launch_app: packageName for a normal installed app with a launcher activity. Do not launch Android Settings, permission controllers, installers, or this companion app.",
+    "- find_visible_text: text, and use only after launch_app",
+    "- tap_visible_node: text, and use only after launch_app",
+    "- type_text: text (ordinary, non-sensitive user-provided text only), and use only after launch_app",
+    "- press_back: no extra fields; use only in the currently launched app",
+    "- press_enter: submit the focused visible field only when the user's intent is a search/query; never use to submit forms, messages, purchases, or account changes",
     "- wait_for_ui: timeoutMs (250..10000), optional visibleText",
     "- report_state: no extra fields",
-    "Each step must have a short user-readable explanation. Maximum 20 steps.",
-    "Never create steps for passwords, PINs, OTPs, purchases, payments, messaging, posting, deleting, account/security changes, permission grants, hidden control, shell commands, or browser automation.",
-    'If the request cannot be fulfilled using only the allowed actions, return {"steps":[{"type":"report_state","explanation":"This request is outside the currently supported safe actions."}]}',
-    "For YouTube search, use launch_app, wait_for_ui, find/tap the visible Search control, type_text with the user's requested query, press_enter, wait_for_ui, then report_state. Do not auto-play a result."
+    "Every UI action after launch_app is bound to that app package and validated against the active visible window. Maximum 20 steps.",
+    "Never create steps for passwords, PINs, OTPs, recovery codes, purchases, payments, sending messages, publishing/posting, deleting data, sharing, transfers, account/security changes, permission grants, hidden control, shell commands, browser automation, or bypassing login/CAPTCHA/security.",
+    "Do not tap controls whose labels suggest consequential actions (send, pay, buy, delete, publish, post, share, transfer, allow, grant, log out).",
+    "If the request cannot be completed using the allowed safe actions, return a single report_state step explaining that it is unsupported.",
+    "For YouTube song search, open YouTube, locate and tap its visible Search control, type the user's query, submit the search, and report the visible result state. Do not tap a song/video result or auto-play.",
+    "Do not assume every app exposes accessible UI. Keep the plan short, visible, and verifiable."
   ].join("\n");
   const messages = [{ role: "user", content: instruction }];
   let answer = "";
