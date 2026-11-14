@@ -50,6 +50,8 @@ function validateSteps(input, installedApps = null) {
       if (Array.isArray(installedApps) && installedApps.length > 0 && !installedApps.some(item => item.packageName === packageName)) throw new Error("The requested app is not in this phone's installed-app list.");
       step.packageName = packageName;
       currentPackage = packageName;
+      lastTypedText = null;
+      lastWaitVisibleText = null;
     } else if (type === "find_visible_text" || type === "tap_visible_node") {
       const text = String(raw.text || "").trim();
       if (!currentPackage) throw new Error("Launch an app before interacting with its visible UI.");
@@ -67,7 +69,9 @@ function validateSteps(input, installedApps = null) {
       }
       step.text = text;
       lastTypedText = text;
+      lastWaitVisibleText = null;
     } else if (type === "confirm_publish") {
+      if (index !== input.length - 1) throw new Error("The publish confirmation must be the final plan step.");
       if (!["com.facebook.katana", "com.facebook.lite"].includes(currentPackage)) throw new Error("Publishing confirmation is supported only in the Facebook app.");
       const buttonText = String(raw.buttonText || "").trim();
       const previewText = String(raw.previewText || "").trim();
