@@ -1,15 +1,19 @@
 package com.persistentagent.mobile
 
 import android.Manifest
+import android.app.AlertDialog
 import android.app.AlarmManager
 import android.app.DatePickerDialog
 import android.app.PendingIntent
 import android.app.TimePickerDialog
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.webkit.WebChromeClient
@@ -22,6 +26,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import org.json.JSONObject
 import java.util.Calendar
 import java.util.Locale
 
@@ -33,6 +38,9 @@ class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var reminderText = "Reminder"
     private val speechRequest = 410
+    private val taskHandler = Handler(Looper.getMainLooper())
+    private var activeUiTaskId: String? = null
+    private var pollInProgress = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +88,10 @@ class MainActivity : ComponentActivity() {
         row.addView(button("Run command") { runCommand(command.text.toString()) }, weight())
         root.addView(row)
         addButton("Connect to Worker") { connectBridge() }
+        addButton("AI Visible UI Assistant (YouTube search)") { submitVisibleUiTask(command.text.toString()) }
+        addButton("Enable Accessibility UI Assistance") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        addButton("Pause current UI task") { stopCurrentUiTask("pause") }
+        addButton("Cancel current UI task") { stopCurrentUiTask("cancel") }
         addButton("Set reminder (choose date & time)") { chooseReminder() }
         addButton("Open app by name") { openApp(command.text.toString()) }
         addButton("Open Android settings") { startActivity(Intent(Settings.ACTION_SETTINGS)) }
@@ -120,6 +132,195 @@ class MainActivity : ComponentActivity() {
                     result.text = "Bridge connection failed: " + (error.message ?: "Unknown error")
                     toast(result.text.toString())
                 }
+            }
+        }
+    }
+
+    private fun submitVisibleUiTask(instruction: String) {
+        if (instruction.isBlank()) { toast("আগে একটি নির্দেশ লিখুন।"); return }
+        result.text = "AI নিরাপদ UI plan তৈরি করছে..."
+        AndroidTaskClient.createTask(instruction) { response ->
+            runOnUiThread {
+                response.onSuccess { payload ->
+                    val task = payload.optJSONObject("task")
+                    val taskId = task?.optString("id").orEmpty()
+                    val plan = payload.optJSONArray("plan")
+                    val hash = payload.optString("planHash")
+                    if (taskId.isBlank() || plan == null || hash.isBlank()) {
+                        result.text = "Plan পাওয়া যায়নি: " + payload.optString("error", "Try again.")
+                        return@onSuccess
+                    }
+                    val lines = (0 until plan.length()).mapNotNull { index ->
+                        val step = plan.optJSONObject(index) ?: return@mapNotNull null
+                        "\${index + 1}. \${step.optString("explanation")} (\${step.optString("type")})"
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Review Android action plan")
+                        .setMessage(lines.joinToString("\n"))
+                        .setPositiveButton("Approve & run") { _, _ -> approveVisibleUiTask(taskId, hash) }
+                        .setNegativeButton("Reject") { _, _ ->
+                            AndroidTaskClient.rejectTask(taskId) { rejected ->
+                                runOnUiThread { result.text = if (rejected.isSuccess) "Plan rejected." else "Could not reject plan." }
+                            }
+                        }
+                        .show()
+                    result.text = "Plan ready. Review and approve before the phone acts."
+                }.onFailure { error ->
+                    result.text = "Task planning failed: " + (error.message ?: "Unknown error")
+                    toast(result.text.toString())
+                }
+            }
+        }
+    }
+
+    private fun approveVisibleUiTask(taskId: String, planHash: String) {
+        if (!isAccessibilityEnabled()) {
+            AlertDialog.Builder(this)
+                .setTitle("Accessibility permission needed")
+                .setMessage("Visible UI assistance needs Android Accessibility permission. It will only run approved steps while a task is active. You can disable it anytime in Android Settings.")
+                .setPositiveButton("Open Settings") { _, _ -> startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                .setNegativeButton("Not now", null)
+                .show()
+            return
+        }
+        val service = VisibleUiAccessibilityService.instance
+        if (service == null) {
+            toast("Accessibility service চালু হচ্ছে। কয়েক সেকেন্ড পর আবার Approve করুন।")
+            return
+        }
+        result.text = "আপনার approval Worker-এ পাঠানো হচ্ছে..."
+        AndroidTaskClient.approveTask(taskId, planHash) { response ->
+            runOnUiThread {
+                response.onSuccess {
+                    activeUiTaskId = taskId
+                    pollInProgress = false
+                    service.setApprovedTaskActive(true)
+                    result.text = "Approved. YouTube UI steps চালানো হচ্ছে..."
+                    pollVisibleUiTask()
+                }.onFailure { error ->
+                    result.text = "Approval failed: " + (error.message ?: "Unknown error")
+                    toast(result.text.toString())
+                }
+            }
+        }
+    }
+
+    private fun isAccessibilityEnabled(): Boolean {
+        val expected = ComponentName(this, VisibleUiAccessibilityService::class.java).flattenToString()
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+    }
+
+    private fun pollVisibleUiTask() {
+        val taskId = activeUiTaskId ?: return
+        if (pollInProgress) return
+        pollInProgress = true
+        AndroidTaskClient.nextAction(taskId) { response ->
+            runOnUiThread {
+                pollInProgress = false
+                response.onSuccess { payload ->
+                    val action = payload.optJSONObject("action")
+                    if (action == null) {
+                        taskHandler.postDelayed({ pollVisibleUiTask() }, 1500)
+                        return@onSuccess
+                    }
+                    val actionId = action.optString("id")
+                    val redelivery = payload.optBoolean("redelivery")
+                    val prefs = getSharedPreferences("android_ui_task", MODE_PRIVATE)
+                    val pendingId = prefs.getString("pending_action_id", null)
+                    if (redelivery) {
+                        if (pendingId == actionId) {
+                            acknowledgeVisibleUiAction(taskId, actionId,
+                                prefs.getString("pending_action_status", "blocked") ?: "blocked",
+                                prefs.getString("pending_action_result", "Retrying saved action acknowledgement.") ?: "")
+                        } else {
+                            acknowledgeVisibleUiAction(taskId, actionId, "blocked",
+                                "Phone execution state was interrupted. Review the visible screen before creating a new task.")
+                        }
+                        return@onSuccess
+                    }
+                    val service = VisibleUiAccessibilityService.instance
+                    val payloadStep = action.optJSONObject("payload")
+                    if (service == null || payloadStep == null) {
+                        acknowledgeVisibleUiAction(taskId, actionId, "blocked", "Accessibility service or action payload is unavailable.")
+                        return@onSuccess
+                    }
+                    service.executeAction(payloadStep) { status, message ->
+                        prefs.edit()
+                            .putString("pending_action_id", actionId)
+                            .putString("pending_action_status", status)
+                            .putString("pending_action_result", message)
+                            .apply()
+                        acknowledgeVisibleUiAction(taskId, actionId, status, message)
+                    }
+                }.onFailure { error ->
+                    val message = error.message ?: "Worker connection interrupted."
+                    if (message.contains("not approved", true) || message.contains("expired", true)) {
+                        refreshVisibleUiTaskStatus(taskId)
+                    } else {
+                        result.text = message + " Retrying..."
+                        taskHandler.postDelayed({ pollVisibleUiTask() }, 2500)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun acknowledgeVisibleUiAction(taskId: String, actionId: String, status: String, message: String) {
+        AndroidTaskClient.sendActionResult(taskId, actionId, status, message) { response ->
+            runOnUiThread {
+                response.onSuccess {
+                    getSharedPreferences("android_ui_task", MODE_PRIVATE).edit().clear().apply()
+                    refreshVisibleUiTaskStatus(taskId)
+                }.onFailure {
+                    result.text = "Action result acknowledgement pending. Retrying safely..."
+                    taskHandler.postDelayed({ pollVisibleUiTask() }, 2500)
+                }
+            }
+        }
+    }
+
+    private fun refreshVisibleUiTaskStatus(taskId: String) {
+        AndroidTaskClient.getTask(taskId) { response ->
+            runOnUiThread {
+                response.onSuccess { payload ->
+                    val status = payload.optJSONObject("task")?.optString("status").orEmpty()
+                    when (status) {
+                        "completed" -> finishVisibleUiTask("Task completed. YouTube search screen checked.")
+                        "failed" -> finishVisibleUiTask("Task failed. Review the phone screen and task history.")
+                        "blocked" -> finishVisibleUiTask("Task stopped by a safety boundary.")
+                        "cancelled" -> finishVisibleUiTask("Task cancelled.")
+                        "paused" -> finishVisibleUiTask("Task paused.")
+                        "rejected" -> finishVisibleUiTask("Plan rejected.")
+                        "approval_expired" -> finishVisibleUiTask("Approval expired. Review and approve a new plan.")
+                        else -> {
+                            result.text = "Task running: $status"
+                            taskHandler.postDelayed({ pollVisibleUiTask() }, 700)
+                        }
+                    }
+                }.onFailure { error ->
+                    result.text = "Could not refresh task status: " + (error.message ?: "Unknown error")
+                    taskHandler.postDelayed({ refreshVisibleUiTaskStatus(taskId) }, 2500)
+                }
+            }
+        }
+    }
+
+    private fun finishVisibleUiTask(message: String) {
+        activeUiTaskId = null
+        pollInProgress = false
+        VisibleUiAccessibilityService.instance?.setApprovedTaskActive(false)
+        result.text = message
+        toast(message)
+    }
+
+    private fun stopCurrentUiTask(operation: String) {
+        val taskId = activeUiTaskId ?: run { toast("কোনো active UI task নেই।"); return }
+        AndroidTaskClient.stopTask(taskId, operation) { response ->
+            runOnUiThread {
+                response.onSuccess {
+                    finishVisibleUiTask(if (operation == "pause") "Task paused." else "Task cancelled.")
+                }.onFailure { error -> toast(error.message ?: "Could not stop task.") }
             }
         }
     }
