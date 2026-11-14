@@ -119,7 +119,7 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
       if (typeof generatePlan !== "function") return res.status(201).json({ task: data, next: "submit_plan" });
       const installedApps = Array.isArray(req.body?.installedApps)
         ? req.body.installedApps.slice(0, 5).filter(item => item && typeof item.packageName === "string" && PACKAGE_NAME.test(item.packageName) && typeof item.label === "string")
-          .map(item => ({ packageName: item.packageName, label: item.label.slice(0, 80) }))
+          .map(item => ({ packageName: item.packageName, label: item.label.replace(/[\\r\\n]/g, " ").slice(0, 80) }))
         : null;
       const steps = validateSteps(await generatePlan(instruction, installedApps), installedApps);
       const hash = planHash(steps);
