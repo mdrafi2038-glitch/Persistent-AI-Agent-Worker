@@ -95,11 +95,13 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
     if (/\b(password|passcode|pin|otp|one.time.password|recovery.code)\b/i.test(instruction)) {
       return res.status(400).json({ error: "Do not send passwords, PINs, OTPs, or recovery codes to the UI assistant." });
     }
+    let createdTaskId = null;
     try {
       const { data, error } = await supabase.from("android_agent_tasks")
         .insert({ instruction, status: "planning" })
         .select("id,instruction,status,created_at,updated_at").single();
       if (error) throw error;
+      createdTaskId = data.id;
       if (typeof generatePlan !== "function") return res.status(201).json({ task: data, next: "submit_plan" });
       const steps = validateSteps(await generatePlan(instruction));
       const hash = planHash(steps);
@@ -113,6 +115,7 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
       if (actionError) throw actionError;
       return res.status(201).json({ task: { ...data, status: "pending_approval" }, plan: steps, planHash: hash, next: "review_and_approve" });
     } catch (error) {
+      if (createdTaskId) await supabase.from("android_agent_tasks").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", createdTaskId).eq("status", "planning");
       console.error("android task create error:", error.message);
       return res.status(500).json({ error: "Could not create Android task." });
     }
