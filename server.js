@@ -6,6 +6,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { registerAgentWorker } = require("./agent-worker");
 const { executeAgentTask } = require("./agent-runtime");
 const { isWorkerInfoRequest, buildWorkerContext } = require("./worker-context");
+const { registerAndroidAgent } = require("./android-agent/api");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -576,6 +577,8 @@ registerAgentWorker({
   requireAuth,
   executeTask: (description, title, taskId) => executeAgentTask({ description, title, taskId })
 });
+
+registerAndroidAgent({ app, supabase, requireAuth });
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Persistent AI Agent listening on ${PORT}; persistence=${supabaseReady ? "supabase" : "memory-only"}; provider=${AI_PROVIDER}`);
