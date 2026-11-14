@@ -21,7 +21,7 @@ create table if not exists public.android_agent_actions (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.android_agent_tasks(id) on delete cascade,
   step_index integer not null check (step_index between 0 and 19),
-  action_type text not null check (action_type in ('launch_app','find_visible_text','tap_visible_node','type_text','press_back','wait_for_ui','report_state')),
+  action_type text not null check (action_type in ('launch_app','find_visible_text','tap_visible_node','type_text','press_back','press_enter','wait_for_ui','report_state')),
   payload jsonb not null,
   status text not null default 'queued'
     check (status in ('queued','dispatched','completed','failed','blocked','cancelled')),
