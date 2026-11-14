@@ -99,6 +99,7 @@ class MainActivity : Activity() {
         addButton("Pause current UI task") { stopCurrentUiTask("pause") }
         addButton("Resume paused UI task") { resumePausedUiTask() }
         addButton("Cancel current UI task") { stopCurrentUiTask("cancel") }
+        addButton("Android task history") { showTaskHistory() }
         addButton("Set reminder (choose date & time)") { chooseReminder() }
         addButton("Open app by name") { openApp(command.text.toString()) }
         addButton("Open Android settings") { startActivity(Intent(Settings.ACTION_SETTINGS)) }
@@ -365,6 +366,53 @@ class MainActivity : Activity() {
                     result.text = error.message ?: "Could not resume task."
                     toast(result.text.toString())
                 }
+            }
+        }
+    }
+    private fun showTaskHistory() {
+        result.text = "Loading Android task history..."
+        AndroidTaskClient.listTasks { response ->
+            runOnUiThread {
+                response.onSuccess { payload ->
+                    val tasks = payload.optJSONArray("tasks")
+                    if (tasks == null || tasks.length() == 0) {
+                        result.text = "No Android tasks yet."
+                        toast(result.text.toString())
+                        return@onSuccess
+                    }
+                    val ids = (0 until tasks.length()).mapNotNull { index -> tasks.optJSONObject(index)?.optString("id") }
+                    val labels = (0 until tasks.length()).mapNotNull { index ->
+                        val task = tasks.optJSONObject(index) ?: return@mapNotNull null
+                        val instruction = task.optString("instruction").take(55)
+                        "${task.optString("status")} — $instruction"
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Android task history")
+                        .setItems(labels.toTypedArray()) { _, which -> loadTaskHistoryDetail(ids[which]) }
+                        .setNegativeButton("Close", null)
+                        .show()
+                    result.text = "Loaded ${labels.size} recent Android tasks."
+                }.onFailure { error ->
+                    result.text = error.message ?: "Could not load task history."
+                    toast(result.text.toString())
+                }
+            }
+        }
+    }
+
+    private fun loadTaskHistoryDetail(taskId: String) {
+        AndroidTaskClient.getTask(taskId) { response ->
+            runOnUiThread {
+                response.onSuccess { payload ->
+                    val task = payload.optJSONObject("task")
+                    val actions = payload.optJSONArray("actions")
+                    val lines = (0 until (actions?.length() ?: 0)).mapNotNull { index ->
+                        val action = actions?.optJSONObject(index) ?: return@mapNotNull null
+                        "${index + 1}. ${action.optString("action_type")} — ${action.optString("status")}: ${action.optString("result")}"
+                    }
+                    val summary = (task?.optString("instruction") ?: "Android task") + "\nStatus: " + (task?.optString("status") ?: "unknown") + "\n\n" + lines.joinToString("\n")
+                    AlertDialog.Builder(this).setTitle("Task details").setMessage(summary).setPositiveButton("OK", null).show()
+                }.onFailure { error -> toast(error.message ?: "Could not load task details.") }
             }
         }
     }
