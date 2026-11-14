@@ -4,7 +4,9 @@ const MAX_INSTRUCTION = 4000;
 const MAX_STEPS = 20;
 const MAX_RESULT = 2000;
 const APPROVAL_TTL_MS = 10 * 60 * 1000;
-const ALLOWED_PACKAGES = new Set(["com.google.android.youtube"]);
+const PACKAGE_NAME = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
+const BLOCKED_PACKAGES = new Set(["android", "com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller"]);
+const BLOCKED_TAP_TEXT = /\b(send|pay|purchase|buy|checkout|delete|remove|publish|post|share|transfer|confirm payment|grant permission|allow access|log ?out|sign ?out)\b/i;
 const ACTION_TYPES = new Set([
   "launch_app",
   "find_visible_text",
@@ -32,6 +34,7 @@ function validateSteps(input) {
   if (!Array.isArray(input) || input.length < 1 || input.length > MAX_STEPS) {
     throw new Error("A plan must contain 1 to 20 actions.");
   }
+  let currentPackage = null;
   return input.map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid action at step " + (index + 1) + ".");
     const type = String(raw.type || "");
@@ -40,20 +43,30 @@ function validateSteps(input) {
     if (!step.explanation) throw new Error("Every action needs a user-readable explanation.");
     if (type === "launch_app") {
       const packageName = String(raw.packageName || "");
-      if (!ALLOWED_PACKAGES.has(packageName)) throw new Error("This app is not in the initial allowed-app list.");
+      if (!PACKAGE_NAME.test(packageName) || BLOCKED_PACKAGES.has(packageName) || packageName.startsWith("com.persistentagent.")) throw new Error("This is not an eligible installed-app package.");
       step.packageName = packageName;
+      currentPackage = packageName;
     } else if (type === "find_visible_text" || type === "tap_visible_node") {
       const text = String(raw.text || "").trim();
+      if (!currentPackage) throw new Error("Launch an app before interacting with its visible UI.");
       if (!text || text.length > 120) throw new Error("Visible text selector must be 1 to 120 characters.");
-      if (type === "tap_visible_node" && !/^(search|search youtube|search icon|search button)$/i.test(text)) throw new Error("Only the visible YouTube search control can be tapped in this version.");
+      if (type === "tap_visible_node" && BLOCKED_TAP_TEXT.test(text)) throw new Error("This visible control may perform a consequential action and is not allowed.");
+      step.targetPackage = currentPackage;
       step.text = text;
     } else if (type === "type_text") {
+      if (!currentPackage) throw new Error("Launch an app before typing into its visible UI.");
+      step.targetPackage = currentPackage;
       const text = String(raw.text || "");
       if (!text.trim() || text.length > 200 || /\b(password|passcode|pin|otp|one.time.password|recovery.code)\b/i.test(text)) {
         throw new Error("Only ordinary, non-sensitive text up to 200 characters can be typed.");
       }
       step.text = text;
+    } else if (type === "press_back" || type === "press_enter" || type === "report_state") {
+      if (!currentPackage) throw new Error("Launch an app before interacting with its visible UI.");
+      step.targetPackage = currentPackage;
     } else if (type === "wait_for_ui") {
+      if (!currentPackage) throw new Error("Launch an app before waiting for its visible UI.");
+      step.targetPackage = currentPackage;
       const timeoutMs = Number(raw.timeoutMs || 5000);
       if (!Number.isInteger(timeoutMs) || timeoutMs < 250 || timeoutMs > 10000) throw new Error("UI wait must be between 250 and 10,000 ms.");
       step.timeoutMs = timeoutMs;
