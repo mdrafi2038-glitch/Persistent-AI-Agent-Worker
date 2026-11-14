@@ -20,6 +20,6 @@ The Worker exposes authenticated task planning and approval routes under `/api/a
 
 The AI can plan visible interactions in normal installed apps using a strict typed action vocabulary. Each task is previewed for approval, expires after ten minutes, and is dispatched one action at a time. The Android app checks the installed launch activity and verifies that the visible window belongs to the approved app before interacting. Search/query text entry is limited to a focused visible field.
 
-The initial example remains YouTube search: open YouTube, search the user's requested phrase, and report the visible results; do not tap a video result or auto-play. Other apps are supported only where their visible controls are exposed to Accessibility and the plan stays within the safety allowlist.
+The YouTube search flow remains supported. A narrowly scoped Facebook feed-post flow is also supported in code: the AI drafts the post, enters it in the Facebook feed composer, and waits for the visible Post button. Before publishing, an Accessibility overlay shows the exact draft and requires a separate **Publish now** confirmation. Cancelling stops the task. Facebook group/page posting, tagging, messages, and other consequential actions remain blocked. App UI labels and Accessibility exposure vary, so physical-device testing is required.
 
 No device registration, browser automation, PC bridge, voice commands, arbitrary shell/code, hidden interaction, or automatic consequential actions are included. A successful CI build is not a substitute for physical-device testing.
