@@ -27,3 +27,15 @@ test("rejects credential-like typed text and oversized plans", () => {
 test("plan hash is stable regardless of object key order", () => {
   assert.equal(planHash([{ type: "report_state", explanation: "Check", timeout: 2 }]), planHash([{ timeout: 2, explanation: "Check", type: "report_state" }]));
 });
+
+test("allows only the YouTube search control to be tapped", () => {
+  assert.equal(validateSteps([
+    { type: "tap_visible_node", text: "Search", explanation: "Open YouTube search" }
+  ])[0].text, "Search");
+  assert.throws(() => validateSteps([
+    { type: "tap_visible_node", text: "Song result", explanation: "Open a result" }
+  ]), /Only the visible YouTube search control/);
+  assert.throws(() => validateSteps([
+    { type: "tap_visible_node", text: "Buy", explanation: "Purchase" }
+  ]), /Only the visible YouTube search control/);
+});
