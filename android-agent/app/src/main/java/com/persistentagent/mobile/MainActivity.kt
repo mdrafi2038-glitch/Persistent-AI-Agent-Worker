@@ -10,6 +10,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -60,59 +61,159 @@ class MainActivity : Activity() {
         if (permissions.isNotEmpty()) requestPermissions(permissions.toTypedArray(), 21)
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun rounded(color: Int, radius: Int = 20, stroke: Int = 0): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+            if (stroke != 0) setStroke(dp(1), stroke)
+        }
+
+    private fun textView(value: String, size: Float, color: Int, bold: Boolean = false): TextView =
+        TextView(this).apply {
+            text = value
+            textSize = size
+            setTextColor(color)
+            if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+
+    private fun panel(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(18), dp(16), dp(18), dp(16))
+        background = rounded(0xFFFFFFFF.toInt(), 20, 0xFFE8ECF4.toInt())
+    }
+
+    private fun actionButton(label: String, primary: Boolean = false, action: () -> Unit): Button =
+        Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 14f
+            setTextColor(if (primary) 0xFFFFFFFF.toInt() else 0xFF26344D.toInt())
+            background = rounded(if (primary) 0xFF315EFB.toInt() else 0xFFF0F3FA.toInt(), 14)
+            minHeight = dp(48)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            setOnClickListener { action() }
+        }
+
+    private fun addSectionHeading(title: String, subtitle: String? = null) {
+        root.addView(textView(title, 17f, 0xFF1C2940.toInt(), true))
+        if (!subtitle.isNullOrBlank()) {
+            root.addView(textView(subtitle, 12f, 0xFF7B879B.toInt()))
+        }
+    }
+
     private fun base(title: String): LinearLayout {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 24, 24, 24)
-            setBackgroundColor(0xFFF7F8FC.toInt())
+            setPadding(dp(18), dp(18), dp(18), dp(22))
+            setBackgroundColor(0xFFF5F7FC.toInt())
         }
-        root.addView(TextView(this).apply { text = title; textSize = 24f; setTextColor(0xFF172033.toInt()) })
-        val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        nav.addView(button("AI Chat") { showChat() }, weight())
-        nav.addView(button("Automation") { showHome() }, weight())
-        root.addView(nav)
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), 0, dp(14))
+        }
+        brand.addView(textView("PERSISTENT  •  AI WORKER", 11f, 0xFF526A9B.toInt(), true))
+        brand.addView(textView(title, 27f, 0xFF17243B.toInt(), true))
+        root.addView(brand)
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = rounded(0xFFE9EEF8.toInt(), 16)
+        }
+        nav.addView(actionButton("Automation", title != "AI Chat") { showHome() }, LinearLayout.LayoutParams(0, -2, 1f))
+        nav.addView(actionButton("AI Chat", title == "AI Chat") { showChat() }, LinearLayout.LayoutParams(0, -2, 1f))
+        root.addView(nav, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
         return root
     }
 
-    private fun weight() = LinearLayout.LayoutParams(0, -2, 1f)
-    private fun button(label: String, action: () -> Unit) = Button(this).apply { text = label; setOnClickListener { action() } }
-    private fun addButton(label: String, action: () -> Unit) { root.addView(button(label, action), LinearLayout.LayoutParams(-1, -2)) }
+    private fun addButton(label: String, action: () -> Unit) {
+        root.addView(actionButton(label, false, action), LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(7)
+        })
+    }
 
     private fun showHome() {
         webView?.destroy(); webView = null
-        base("Persistent AI Agent")
-        root.addView(TextView(this).apply {
-            text = "বাংলায় নির্দেশ লিখুন বা ভয়েস ব্যবহার করুন। ফোনে করা কাজগুলো আপনার অনুমতিতেই হবে।"
-            textSize = 16f; setTextColor(0xFF39445A.toInt())
-        })
-        command = EditText(this).apply { hint = "যেমন: open settings / remind me to call home"; minLines = 2 }
-        root.addView(command, LinearLayout.LayoutParams(-1, -2))
-        addButton("Run command") { runCommand(command.text.toString()) }
-        addButton("Connect to Worker") { connectBridge() }
-        addButton("AI Visible UI Assistant (Android apps)") { submitVisibleUiTask(command.text.toString()) }
-        addButton("Approve pending UI plan") {
-            val taskId = pendingUiTaskId
-            val hash = pendingUiPlanHash
-            if (taskId != null && hash != null) approveVisibleUiTask(taskId, hash) else toast("কোনো pending plan নেই।")
+        base("Your AI workspace")
+
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xFF203B78.toInt(), 0xFF315EFB.toInt())
+            ).apply { cornerRadius = dp(22).toFloat() }
         }
-        addButton("Enable Accessibility UI Assistance") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-        addButton("Pause current UI task") { stopCurrentUiTask("pause") }
-        addButton("Resume paused UI task") { resumePausedUiTask() }
-        addButton("Cancel current UI task") { stopCurrentUiTask("cancel") }
-        addButton("Android task history") { showTaskHistory() }
-        addButton("Set reminder (choose date & time)") { chooseReminder() }
-        addButton("Open app by name") { openApp(command.text.toString()) }
-        addButton("Open Android settings") { startActivity(Intent(Settings.ACTION_SETTINGS)) }
-        addButton("App permissions") { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }
-        addButton("Battery/background settings") { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-        result = TextView(this).apply { text = "Ready."; textSize = 15f; setPadding(0, 18, 0, 0); setTextColor(0xFF39445A.toInt()) }
-        root.addView(result)
-        setContentView(ScrollView(this).apply { addView(root) })
+        hero.addView(textView("ONE AGENT. MANY TASKS.", 11f, 0xFFD9E4FF.toInt(), true))
+        hero.addView(textView("What should I do for you?", 23f, 0xFFFFFFFF.toInt(), true))
+        hero.addView(textView("Write a command in Bangla, Banglish or English. The AI will plan the visible steps.", 14f, 0xFFEAF0FF.toInt()))
+        root.addView(hero, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+
+        val commandCard = panel()
+        commandCard.addView(textView("YOUR COMMAND", 11f, 0xFF71809A.toInt(), true))
+        command = EditText(this).apply {
+            hint = "যেমন: YouTube খুলে একটি গান খুঁজে দাও"
+            minLines = 2
+            textSize = 16f
+            setTextColor(0xFF1D2B43.toInt())
+            setHintTextColor(0xFF98A3B5.toInt())
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = rounded(0xFFF5F7FB.toInt(), 14, 0xFFE4E9F2.toInt())
+        }
+        commandCard.addView(command, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        commandCard.addView(actionButton("✦  Plan & run with AI", true) {
+            submitVisibleUiTask(command.text.toString())
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        commandCard.addView(textView("You review the plan before the phone performs approved actions.", 12f, 0xFF7B879B.toInt()).apply {
+            setPadding(0, dp(8), 0, 0)
+        })
+        root.addView(commandCard, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(18) })
+
+        addSectionHeading("Task controls", "Manage the current task and Android access")
+        val controls = panel()
+        controls.addView(actionButton("Enable Accessibility assistance") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        })
+        controls.addView(actionButton("Pause current task") { stopCurrentUiTask("pause") }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        controls.addView(actionButton("Resume paused task") { resumePausedUiTask() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        controls.addView(actionButton("Cancel current task") { stopCurrentUiTask("cancel") }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        controls.addView(actionButton("View task history") { showTaskHistory() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        root.addView(controls, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(18) })
+
+        addSectionHeading("More tools", "Connections, reminders and phone settings")
+        val tools = panel()
+        tools.addView(actionButton("Connect to Worker") { connectBridge() })
+        tools.addView(actionButton("Set a reminder") { chooseReminder() }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        tools.addView(actionButton("Open app by name") { openApp(command.text.toString()) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        tools.addView(actionButton("Android settings") { startActivity(Intent(Settings.ACTION_SETTINGS)) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        tools.addView(actionButton("App permissions") {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        tools.addView(actionButton("Battery & background settings") {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        root.addView(tools, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+
+        val statusCard = panel()
+        statusCard.addView(textView("ACTIVITY", 11f, 0xFF71809A.toInt(), true))
+        result = textView("Ready when you are.", 14f, 0xFF34435D.toInt())
+        statusCard.addView(result, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        root.addView(statusCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        setContentView(ScrollView(this).apply {
+            clipToPadding = false
+            setPadding(0, 0, 0, dp(10))
+            addView(root)
+        })
     }
 
     private fun showChat() {
         webView?.destroy()
         base("AI Chat")
+        val intro = panel()
+        intro.addView(textView("Talk to your AI Worker", 18f, 0xFF1C2940.toInt(), true))
+        intro.addView(textView("Chat, ask questions and work with your persistent AI workspace.", 13f, 0xFF71809A.toInt()))
+        root.addView(intro, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         val web = WebView(this)
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
@@ -123,7 +224,6 @@ class MainActivity : Activity() {
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
     }
-
 
     private fun connectBridge() {
         result.text = "Worker-এর সাথে সংযোগ হচ্ছে..."
