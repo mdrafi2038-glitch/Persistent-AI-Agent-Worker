@@ -27,6 +27,7 @@ import android.widget.TextView
 import android.widget.Toast
 import android.app.Activity
 import org.json.JSONObject
+import org.json.JSONArray
 import java.util.Calendar
 import java.util.Locale
 
@@ -147,10 +148,26 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun getLaunchableApps(): JSONArray {
+        val apps = JSONArray()
+        val blocked = setOf("com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller", "com.persistentagent.mobile")
+        val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+            .filter { app -> app.packageName !in blocked && !app.packageName.startsWith("com.persistentagent.") }
+            .mapNotNull { app ->
+                val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName) ?: return@mapNotNull null
+                val label = packageManager.getApplicationLabel(app).toString().take(80)
+                JSONObject().put("packageName", app.packageName).put("label", label)
+            }
+            .distinctBy { it.optString("packageName") }
+            .take(150)
+        installed.forEach(apps::put)
+        return apps
+    }
+
     private fun submitVisibleUiTask(instruction: String) {
         if (instruction.isBlank()) { toast("আগে একটি নির্দেশ লিখুন।"); return }
         result.text = "AI নিরাপদ UI plan তৈরি করছে..."
-        AndroidTaskClient.createTask(instruction) { response ->
+        AndroidTaskClient.createTask(instruction, getLaunchableApps()) { response ->
             runOnUiThread {
                 response.onSuccess { payload ->
                     val task = payload.optJSONObject("task")
