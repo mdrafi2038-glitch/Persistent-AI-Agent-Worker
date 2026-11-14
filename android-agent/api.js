@@ -6,7 +6,7 @@ const MAX_RESULT = 2000;
 const APPROVAL_TTL_MS = 10 * 60 * 1000;
 const PACKAGE_NAME = /^[a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
 const BLOCKED_PACKAGES = new Set(["android", "com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller"]);
-const BLOCKED_TAP_TEXT = /\b(send|pay|purchase|buy|checkout|delete|remove|publish|post|share|transfer|confirm payment|grant permission|allow access|log ?out|sign ?out)\b/i;
+const BLOCKED_TAP_TEXT = /\b(send|pay|purchase|buy|checkout|delete|remove|publish|post|share|transfer|allow|enable|accept|agree|confirm|continue|install|uninstall|subscribe|submit|log ?out|sign ?out)\b/i;
 const ACTION_TYPES = new Set([
   "launch_app",
   "find_visible_text",
