@@ -605,6 +605,7 @@ async function generateAndroidPlan(instruction, installedApps = []) {
   ].join("\n");
   const messages = [{ role: "user", content: instruction }];
   const attempts = [];
+  let answer = "";
   let lastError = null;
 
   // Keep the configured primary provider first, but do not let one unavailable
