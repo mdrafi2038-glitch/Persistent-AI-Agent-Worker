@@ -45,7 +45,7 @@ function validateSteps(input) {
     } else if (type === "find_visible_text" || type === "tap_visible_node") {
       const text = String(raw.text || "").trim();
       if (!text || text.length > 120) throw new Error("Visible text selector must be 1 to 120 characters.");
-      if (type === "tap_visible_node" && /^(send|buy|purchase|pay|delete|remove|unsubscribe|subscribe|post|publish|share|sign out|log out|change password|security|grant|allow|install|confirm|place order)$/i.test(text)) throw new Error("This action target requires a separate safety flow and is not supported.");
+      if (type === "tap_visible_node" && !/^(search|search youtube|search icon|search button)$/i.test(text)) throw new Error("Only the visible YouTube search control can be tapped in this version.");
       step.text = text;
     } else if (type === "type_text") {
       const text = String(raw.text || "");
