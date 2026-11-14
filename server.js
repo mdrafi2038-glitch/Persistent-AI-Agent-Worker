@@ -83,6 +83,28 @@ function requireConfig(res) {
 
 app.get("/health", (_req, res) => res.json({ ok: true, persistence: supabaseReady ? "supabase" : "memory-only" }));
 
+app.get("/api/android/bridge/capabilities", requireAuth, (_req, res) => {
+  // Read-only discovery endpoint. Device actions are never accepted here.
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    ok: true,
+    bridge: "android-v1",
+    mode: "capability-discovery-only",
+    capabilities: [
+      { id: "launch_app", requiresUserApproval: true, execution: "on-device" },
+      { id: "open_settings", requiresUserApproval: true, execution: "on-device" },
+      { id: "create_reminder", requiresUserApproval: true, execution: "on-device" }
+    ],
+    restrictions: {
+      arbitraryShell: false,
+      hiddenControl: false,
+      accessibilityAutomation: false,
+      remoteExecutionEnabled: false
+    },
+    serverTime: new Date().toISOString()
+  });
+});
+
 app.get("/api/status", (_req, res) => {
   res.json({
     ok: true,

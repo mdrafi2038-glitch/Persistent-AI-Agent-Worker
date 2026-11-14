@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
         row.addView(button("🎙 Voice") { startVoice() }, weight())
         row.addView(button("Run command") { runCommand(command.text.toString()) }, weight())
         root.addView(row)
+        addButton("Connect to Worker") { connectBridge() }
         addButton("Set reminder (choose date & time)") { chooseReminder() }
         addButton("Open app by name") { openApp(command.text.toString()) }
         addButton("Open Android settings") { startActivity(Intent(Settings.ACTION_SETTINGS)) }
@@ -101,6 +102,26 @@ class MainActivity : ComponentActivity() {
         webView = web
         root.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+    }
+
+
+    private fun connectBridge() {
+        result.text = "Worker-এর সাথে সংযোগ হচ্ছে..."
+        AndroidBridgeClient.fetchCapabilities { response ->
+            runOnUiThread {
+                response.onSuccess { payload ->
+                    val capabilities = payload.optJSONArray("capabilities")
+                    val names = (0 until (capabilities?.length() ?: 0)).mapNotNull { index ->
+                        capabilities?.optJSONObject(index)?.optString("id")
+                    }
+                    result.text = "Bridge connected (read-only). Available local capabilities: " + names.joinToString()
+                    toast("Worker connection verified. Remote actions are not enabled yet.")
+                }.onFailure { error ->
+                    result.text = "Bridge connection failed: " + (error.message ?: "Unknown error")
+                    toast(result.text.toString())
+                }
+            }
+        }
     }
 
     private fun startVoice() {
