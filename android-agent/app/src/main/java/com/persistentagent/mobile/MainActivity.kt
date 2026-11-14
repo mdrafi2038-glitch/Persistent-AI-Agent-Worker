@@ -154,7 +154,13 @@ class MainActivity : ComponentActivity() {
                     }
                     val lines = (0 until plan.length()).mapNotNull { index ->
                         val step = plan.optJSONObject(index) ?: return@mapNotNull null
-                        "${index + 1}. ${step.optString("explanation")} (${step.optString("type")})"
+                        val detail = when (step.optString("type")) {
+                            "type_text" -> " — text: " + step.optString("text")
+                            "launch_app" -> " — app: " + step.optString("packageName")
+                            "find_visible_text", "tap_visible_node" -> " — target: " + step.optString("text")
+                            else -> ""
+                        }
+                        "${index + 1}. ${step.optString("explanation")} (${step.optString("type")})$detail"
                     }
                     AlertDialog.Builder(this)
                         .setTitle("Review Android action plan")
