@@ -1,6 +1,11 @@
 name: Build Android AI Agent APK
 on:
   push:
+    branches: [main, "feature/**"]
+    paths:
+      - "android-agent/**"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
     branches: [main]
     paths:
       - "android-agent/**"
