@@ -71,8 +71,9 @@ Tool availability is shown by the authenticated `/api/status` endpoint. Browser 
 
 ## Android visible UI assistance (in progress)
 
-The Worker-owned Android app has a guarded YouTube-only visible UI flow. It asks the AI provider for a typed plan, shows that plan for approval, then uses Android Accessibility only while the approved task is active. The initial tap allowlist is limited to YouTube's Search control; it will not tap a video result or auto-play. Typing is limited to a focused visible YouTube search field.
+The Worker-owned Android companion app is designed for Android 10+ across manufacturers, not for OPPO only. It uses an opt-in Accessibility service for approved, visible UI steps in normal installed apps where the app exposes accessible controls. The AI creates a typed plan, the user reviews and approves it, and the Worker dispatches one step at a time. The initial demonstration is YouTube search (search only; no automatic video selection or playback).
 
-Before testing, run `supabase/migrations/20261114000000_android_agent.sql` in addition to `schema.sql`. The server requires the existing authenticated Worker session and Supabase service-role configuration. See `android-agent/API.md` for endpoint details.
+The action allowlist blocks credential entry, payments, purchases, messaging, publishing, deletion, sharing, transfers, account/security changes, permission grants, hidden control, browser automation, and arbitrary shell/code. UI behavior varies by Android version and target app; broad device support does not mean every app or every action is guaranteed. Android 10 may not expose the same IME submit action as later versions. Physical-device testing is still required.
 
-The companion APK workflow now also runs on feature branches. Device registration, browser automation, PC bridge, and new voice-command work remain out of scope. A physical-device end-to-end test is still required before this feature should be considered complete.
+The companion app remains separate from all other Personal Agent repositories. Device registration, browser automation, PC bridge, and voice commands remain out of scope for this increment. See `android-agent/API.md` for the API and safety boundaries.
+
