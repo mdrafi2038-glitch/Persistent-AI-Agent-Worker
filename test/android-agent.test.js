@@ -42,6 +42,10 @@ test("rejects consequential controls and credential-like typed text", () => {
   ]), /consequential action/);
   assert.throws(() => validateSteps([
     { type: "launch_app", packageName: "com.google.android.youtube", explanation: "Open app" },
+    { type: "tap_visible_node", text: "Allow", explanation: "Grant app permission" }
+  ]), /consequential action/);
+  assert.throws(() => validateSteps([
+    { type: "launch_app", packageName: "com.google.android.youtube", explanation: "Open app" },
     { type: "type_text", text: "OTP 123456", explanation: "Enter code" }
   ]), /non-sensitive/);
 });
