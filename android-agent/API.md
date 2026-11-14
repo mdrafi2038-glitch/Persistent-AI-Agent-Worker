@@ -24,7 +24,7 @@ All responses are marked `Cache-Control: no-store`. Unknown actions, invalid pac
 
 ## Supported action vocabulary
 
-- `launch_app`: launch a normal installed app with a launcher activity. The Android device checks whether the app is installed before launching.
+- `launch_app`: launch a normal installed app with a launcher activity. The phone sends only the names/package IDs of apps explicitly named in the command (up to five matches), and checks locally that the app is installed before launching.
 - `find_visible_text` / `tap_visible_node`: find an exact, unique visible label in the currently approved app.
 - `type_text`: enter ordinary non-sensitive text (maximum 200 characters) into a focused visible editable field.
 - `press_enter`: submit a focused visible field only when the plan is a user-requested search/query. Android 10 may not expose the required IME action; in that case the step is blocked rather than simulated.
