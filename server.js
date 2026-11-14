@@ -604,24 +604,61 @@ async function generateAndroidPlan(instruction, installedApps = []) {
     "Do not assume every app exposes its controls to Android Accessibility. If the needed label is ambiguous or unavailable, stop safely. This is a visible UI assistant, not unrestricted control of every app."
   ].join("\n");
   const messages = [{ role: "user", content: instruction }];
+  const attempts = [];
   let answer = "";
+  let lastError = null;
+
+  // Keep the configured primary provider first, but do not let one unavailable
+  // HCSN channel make every Android command fail when the configured fallback works.
   if (AI_PROVIDER === "anthropic") {
-    answer = await requestAnthropic(messages, system);
+    attempts.push({ kind: "anthropic" });
   } else {
-    let provider = null;
-    if (isHcnsecProvider() && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
-      const models = await fetchHcnsecFreeModels();
-      const preferred = String(process.env.AI_MODEL || "");
-      const model = models.includes(preferred) ? preferred : models[0];
-      if (model) provider = { model, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL };
-    } else if (process.env.AI_API_KEY && process.env.AI_BASE_URL) {
-      const models = process.env.AI_MODEL ? [process.env.AI_MODEL] : await fetchCompatibleModels();
-      if (models[0]) provider = { model: models[0], apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL };
+    try {
+      if (isHcnsecProvider() && process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+        const models = await fetchHcnsecFreeModels();
+        const preferred = String(process.env.AI_MODEL || "");
+        const model = models.includes(preferred) ? preferred : models[0];
+        if (model) attempts.push({ kind: "compatible", model, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+      } else if (process.env.AI_API_KEY && process.env.AI_BASE_URL) {
+        const models = process.env.AI_MODEL ? [process.env.AI_MODEL] : await fetchCompatibleModels();
+        if (models[0]) attempts.push({ kind: "compatible", model: models[0], apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL });
+      }
+    } catch (error) {
+      lastError = error;
+      console.error("android primary model discovery failed:", error.message);
     }
-    if (!provider && OPENROUTER_READY) provider = { model: process.env.OPENROUTER_MODEL, apiKey: process.env.OPENROUTER_API_KEY, baseUrl: OPENROUTER_BASE_URL };
-    if (!provider) throw new Error("No configured AI model is available to plan Android actions.");
-    answer = await requestCompatible([{ role: "system", content: system }, ...messages], provider.model, null, provider);
   }
+
+  if (OPENROUTER_READY) {
+    const duplicate = attempts.some(item => item.kind === "compatible" &&
+      item.model === process.env.OPENROUTER_MODEL && item.baseUrl === OPENROUTER_BASE_URL);
+    if (!duplicate) attempts.push({
+      kind: "compatible",
+      model: process.env.OPENROUTER_MODEL,
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseUrl: OPENROUTER_BASE_URL
+    });
+  }
+
+  for (const provider of attempts) {
+    try {
+      if (provider.kind === "anthropic") {
+        answer = await requestAnthropic(messages, system);
+      } else {
+        answer = await requestCompatible([{ role: "system", content: system }, ...messages],
+          provider.model, null, { apiKey: provider.apiKey, baseUrl: provider.baseUrl });
+      }
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      console.error("android planner provider failed:", provider.kind === "anthropic" ? "anthropic" : provider.model, error.message);
+    }
+  }
+  if (lastError || typeof answer !== "string" || !answer.trim()) {
+    throw new Error(lastError?.message || "No configured AI model could create an Android plan.");
+  }
+
   const cleaned = answer.trim().replace(/^\x60{3}(?:json)?\s*/i, "").replace(/\s*\x60{3}$/, "");
   let parsed;
   try { parsed = JSON.parse(cleaned); }
