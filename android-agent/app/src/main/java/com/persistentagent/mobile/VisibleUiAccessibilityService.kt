@@ -88,6 +88,15 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                     callback(if (changed) "completed" else "failed", if (changed) "Search text entered into the focused visible field." else "No visible editable field was available.")
                 }
             }
+            "press_enter" -> {
+                if (!isYouTube(root)) callback("blocked", "Search submission is limited to YouTube.")
+                else if (android.os.Build.VERSION.SDK_INT < 30) callback("blocked", "This Android version does not expose the supported visible IME submit action.")
+                else {
+                    val field = findEditableNode(root)
+                    val submitted = field?.performAction(AccessibilityNodeInfo.ACTION_IME_ENTER) == true
+                    callback(if (submitted) "completed" else "failed", if (submitted) "Visible search field submitted." else "Could not submit the focused search field.")
+                }
+            }
             "press_back" -> {
                 if (!isYouTube(root)) callback("blocked", "Back navigation is limited to YouTube.")
                 else callback(if (performGlobalAction(GLOBAL_ACTION_BACK)) "completed" else "failed", "Back navigation requested.")
