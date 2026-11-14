@@ -263,6 +263,8 @@ class MainActivity : Activity() {
                         return@onSuccess
                     }
                     val actionId = action.optString("id")
+                    val stepNumber = action.optInt("step_index", 0) + 1
+                    result.text = "কাজ চলছে — ধাপ $stepNumber: " + action.optString("action_type")
                     val redelivery = payload.optBoolean("redelivery")
                     val prefs = getSharedPreferences("android_ui_task", MODE_PRIVATE)
                     val pendingId = prefs.getString("pending_action_id", null)
@@ -332,7 +334,11 @@ class MainActivity : Activity() {
                         "rejected" -> finishVisibleUiTask("Plan rejected.")
                         "approval_expired" -> finishVisibleUiTask("Approval expired. Review and approve a new plan.")
                         else -> {
-                            result.text = "Task running: $status"
+                            val actions = payload.optJSONArray("actions")
+                            val total = actions?.length() ?: 0
+                            val completed = (0 until total).count { index -> actions?.optJSONObject(index)?.optString("status") == "completed" }
+                            val nextStep = (0 until total).firstOrNull { index -> actions?.optJSONObject(index)?.optString("status") != "completed" }?.plus(1)
+                            result.text = if (total > 0) "কাজ চলছে — $completed/$total ধাপ সম্পন্ন" + (nextStep?.let { " • পরের ধাপ $it" } ?: "") else "Task running: $status"
                             taskHandler.postDelayed({ pollVisibleUiTask() }, 700)
                         }
                     }
