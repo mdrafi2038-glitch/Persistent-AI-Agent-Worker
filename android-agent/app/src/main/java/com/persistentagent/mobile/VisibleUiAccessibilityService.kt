@@ -19,21 +19,24 @@ class VisibleUiAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Do not collect or log screen contents. Inspect the active window only during an approved task.
+        // Screen content is inspected only on demand for an approved action.
     }
 
     override fun onInterrupt() {
         taskActive = false
+        mainHandler.removeCallbacksAndMessages(null)
     }
 
     override fun onDestroy() {
         taskActive = false
+        mainHandler.removeCallbacksAndMessages(null)
         if (instance === this) instance = null
         super.onDestroy()
     }
 
     fun setApprovedTaskActive(active: Boolean) {
         taskActive = active
+        if (!active) mainHandler.removeCallbacksAndMessages(null)
     }
 
     fun executeAction(action: JSONObject, callback: (String, String) -> Unit) {
@@ -42,67 +45,66 @@ class VisibleUiAccessibilityService : AccessibilityService() {
             return
         }
         val type = action.optString("type")
+        val targetPackage = action.optString("targetPackage")
         val root = rootInActiveWindow
         when (type) {
             "launch_app" -> {
-                val packageName = action.optString("packageName")
-                if (packageName != YOUTUBE_PACKAGE) {
-                    callback("blocked", "The requested app is not in the on-device allowlist.")
+                val requested = action.optString("packageName")
+                if (!isEligiblePackage(requested)) {
+                    callback("blocked", "This app cannot be launched by the visible UI assistant.")
                     return
                 }
-                val launch = packageManager.getLaunchIntentForPackage(YOUTUBE_PACKAGE)
-                if (launch == null) callback("failed", "YouTube is not installed.")
+                val launch = packageManager.getLaunchIntentForPackage(requested)
+                if (launch == null) callback("failed", "The requested app is not installed or has no launch screen.")
                 else {
                     launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     startActivity(launch)
-                    callback("completed", "YouTube launch intent sent.")
+                    callback("completed", "App launch requested: $requested")
                 }
             }
             "find_visible_text" -> {
-                if (!isYouTube(root)) callback("blocked", "The active app is not YouTube.")
+                if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
                 else {
                     val found = findVisibleNode(root, action.optString("text")) != null
                     callback(if (found) "completed" else "failed", if (found) "Requested visible text was found." else "Requested text is not visible.")
                 }
             }
             "tap_visible_node" -> {
-                if (!isYouTube(root)) callback("blocked", "The active app is not YouTube.")
+                val label = action.optString("text")
+                if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
+                else if (BLOCKED_ACTION_TEXT.containsMatchIn(label)) callback("blocked", "This control may perform a consequential action and is blocked.")
                 else {
-                    val node = findVisibleNode(root, action.optString("text"))
+                    val node = findVisibleNode(root, label)
                     val clickable = clickableAncestor(node)
                     val clicked = clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-                    callback(if (clicked) "completed" else "failed", if (clicked) "Visible YouTube control tapped." else "Could not safely tap the requested visible control.")
+                    callback(if (clicked) "completed" else "failed", if (clicked) "Visible control tapped in the approved app." else "Could not safely tap the requested visible control.")
                 }
             }
             "type_text" -> {
-                if (!isYouTube(root)) callback("blocked", "The active app is not YouTube.")
+                val text = action.optString("text")
+                if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
+                else if (text.length > 200 || SENSITIVE_TEXT.containsMatchIn(text)) callback("blocked", "Sensitive or oversized text is not allowed.")
                 else {
-                    val text = action.optString("text")
-                    if (text.length > 200 || SENSITIVE_TEXT.containsMatchIn(text)) {
-                        callback("blocked", "Sensitive or oversized text is not allowed.")
-                        return
-                    }
                     val field = findEditableNode(root)
-                    if (field == null || !field.isFocused) {
-                        callback("blocked", "No focused visible YouTube search field is available.")
-                        return
+                    if (field == null || !field.isFocused) callback("blocked", "No focused visible text field is available.")
+                    else {
+                        val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
+                        val changed = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                        callback(if (changed) "completed" else "failed", if (changed) "Text entered into the focused visible field." else "Could not update the focused text field.")
                     }
-                    val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
-                    val changed = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-                    callback(if (changed) "completed" else "failed", if (changed) "Search text entered into the focused visible field." else "Could not update the focused search field.")
                 }
             }
             "press_enter" -> {
-                if (!isYouTube(root)) callback("blocked", "Search submission is limited to YouTube.")
+                if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
                 else if (android.os.Build.VERSION.SDK_INT < 30) callback("blocked", "This Android version does not expose the supported visible IME submit action.")
                 else {
                     val field = findEditableNode(root)
                     val submitted = field?.takeIf { it.isFocused }?.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id) == true
-                    callback(if (submitted) "completed" else "failed", if (submitted) "Visible search field submitted." else "Could not submit the focused search field.")
+                    callback(if (submitted) "completed" else "failed", if (submitted) "Focused visible field submitted." else "Could not submit the focused field.")
                 }
             }
             "press_back" -> {
-                if (!isYouTube(root)) callback("blocked", "Back navigation is limited to YouTube.")
+                if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
                 else callback(if (performGlobalAction(GLOBAL_ACTION_BACK)) "completed" else "failed", "Back navigation requested.")
             }
             "wait_for_ui" -> {
@@ -112,21 +114,27 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                     else {
                         val current = rootInActiveWindow
                         val expected = action.optString("visibleText")
-                        val found = expected.isBlank() || (isYouTube(current) && findVisibleNode(current, expected) != null)
-                        callback(if (found) "completed" else "failed", if (found) "UI wait condition satisfied." else "Expected visible text did not appear before timeout.")
+                        val found = isTargetApp(current, targetPackage) && (expected.isBlank() || findVisibleNode(current, expected) != null)
+                        callback(if (found) "completed" else "failed", if (found) "UI wait condition satisfied." else "Expected visible UI condition was not found.")
                     }
                 }, timeout.toLong())
             }
             "report_state" -> {
-                callback(if (isYouTube(root)) "completed" else "blocked",
-                    if (isYouTube(root)) "YouTube is the active visible app. No screen text was collected." else "YouTube is not the active visible app.")
+                val matches = isTargetApp(root, targetPackage)
+                callback(if (matches) "completed" else "blocked", if (matches) "The approved app is active. Screen text was not stored." else "The approved app is not the active visible app.")
             }
             else -> callback("blocked", "Unsupported action type.")
         }
     }
 
-    private fun isYouTube(root: AccessibilityNodeInfo?): Boolean =
-        taskActive && root?.packageName?.toString() == YOUTUBE_PACKAGE
+    private fun isEligiblePackage(value: String): Boolean =
+        PACKAGE_PATTERN.matches(value) &&
+            value != packageName &&
+            !BLOCKED_PACKAGES.contains(value) &&
+            !value.startsWith("com.persistentagent.")
+
+    private fun isTargetApp(root: AccessibilityNodeInfo?, targetPackage: String): Boolean =
+        taskActive && targetPackage.isNotBlank() && root?.packageName?.toString() == targetPackage
 
     private fun findVisibleNode(root: AccessibilityNodeInfo?, target: String): AccessibilityNodeInfo? {
         if (root == null || target.isBlank()) return null
@@ -179,7 +187,9 @@ class VisibleUiAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        const val YOUTUBE_PACKAGE = "com.google.android.youtube"
+        private val PACKAGE_PATTERN = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$")
+        private val BLOCKED_PACKAGES = setOf("android", "com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller")
+        private val BLOCKED_ACTION_TEXT = Regex("\\b(send|pay|purchase|buy|checkout|delete|remove|publish|post|share|transfer|confirm payment|grant permission|allow access|log ?out|sign ?out)\\b", RegexOption.IGNORE_CASE)
         private val SENSITIVE_TEXT = Regex("\\b(password|passcode|pin|otp|one.time.password|recovery.code)\\b", RegexOption.IGNORE_CASE)
         @Volatile var instance: VisibleUiAccessibilityService? = null
             private set
