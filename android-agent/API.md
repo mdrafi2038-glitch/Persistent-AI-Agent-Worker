@@ -1,38 +1,45 @@
-# Android Visible UI API (foundation)
+# Android Visible UI API
 
-This is the server-side approval and action-queue foundation for the Worker-owned Android app in this repository. Every route uses the existing signed-in Worker session cookie. No device-registration workflow is used.
+This is the authenticated task-planning and visible-action queue for the Worker-owned Android companion app. It is brand-independent and does not use device registration.
 
 ## Setup
 
-1. Apply \`supabase/migrations/20261114000000_android_agent.sql\` in the Supabase SQL Editor.
-2. Keep \`SUPABASE_URL\` and \`SUPABASE_SERVICE_ROLE_KEY\` configured only on the Render server.
-3. The existing Worker AI provider is used to generate a structured plan. The plan is validated against the allowlist before it can be approved.
+1. Apply the Android task migrations in `supabase/migrations/` in timestamp order.
+2. Keep `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` configured only on the server.
+3. The configured Worker AI provider generates a structured plan. The server validates every action before approval.
 
-If Supabase is not configured, Android task endpoints return HTTP 503 rather than using volatile in-memory storage.
+Without Supabase persistence, Android task endpoints return HTTP 503.
 
 ## Lifecycle
 
-- \`POST /api/android/tasks\` with \`{ "instruction": "..." }\` creates a task and asks the configured AI model for a typed plan.
-- \`GET /api/android/tasks/:id\` fetches plan and progress.
-- \`POST /api/android/tasks/:id/approve\` with the exact \`{ "planHash": "..." }\` approves that plan for ten minutes.
-- \`GET /api/android/tasks/:id/next-action\` returns one action at a time. It redelivers the current in-flight action until acknowledged; the Android client must deduplicate by action ID. A later step is never dispatched while an earlier step is awaiting acknowledgement.
-- \`POST /api/android/tasks/:id/action-result\` with \`{ "actionId": "...", "status": "completed|failed|blocked", "result": "..." }\` acknowledges the dispatched action.
-- \`POST /api/android/tasks/:id/reject\`, \`/pause\`, and \`/cancel\` stop the task.
-- \`GET /api/android/tasks\` and \`GET /api/android/tasks/:id\` show task and action history.
+- `POST /api/android/tasks` with `{ "instruction": "..." }` creates a task and asks the configured AI model for a typed plan.
+- `GET /api/android/tasks/:id` fetches plan and progress.
+- `POST /api/android/tasks/:id/approve` with the exact `{ "planHash": "..." }` approves that plan for ten minutes.
+- `GET /api/android/tasks/:id/next-action` returns one action at a time and redelivers an in-flight action until acknowledged.
+- `POST /api/android/tasks/:id/action-result` acknowledges the dispatched action.
+- `POST /api/android/tasks/:id/reject`, `/pause`, and `/cancel` control the task.
+- `GET /api/android/tasks` and `GET /api/android/tasks/:id` show task and action history.
 
-All responses are marked \`Cache-Control: no-store\`. Unknown actions, arbitrary shell commands, unapproved apps, sensitive typed text, oversized plans, stale approvals, and duplicate acknowledgements are rejected.
+All responses are marked `Cache-Control: no-store`. Unknown actions, invalid package names, blocked system apps, sensitive typed text, oversized plans, stale approvals, and duplicate acknowledgements are rejected.
 
-## Initial allowlist
+## Supported action vocabulary
 
-- \`launch_app\`: YouTube only (\`com.google.android.youtube\`).
-- \`find_visible_text\` / \`tap_visible_node\`: exact visible text selector.
-- \`type_text\`: ordinary non-sensitive text, maximum 200 characters.
-- \`press_back\`.
-- \`wait_for_ui\`: bounded to 250–10,000 ms.
-- \`report_state\`.
+- `launch_app`: launch a normal installed app with a launcher activity. The Android device checks whether the app is installed before launching.
+- `find_visible_text` / `tap_visible_node`: find an exact, unique visible label in the currently approved app.
+- `type_text`: enter ordinary non-sensitive text (maximum 200 characters) into a focused visible editable field.
+- `press_enter`: submit a focused visible field only when the plan is a user-requested search/query. Android 10 may not expose the required IME action; in that case the step is blocked rather than simulated.
+- `press_back`: navigate back within the approved active app.
+- `wait_for_ui`: bounded to 250–10,000 ms.
+- `report_state`: report whether the approved app is currently active without storing a screen dump.
 
-The API does not accept arbitrary gestures, code, shell commands, passwords, PINs, OTPs, payments, purchases, posts, or message sending. The Worker-owned Android app includes a plan-review dialog, a recent task history screen, pause/resume/cancel controls, and an Accessibility service that is inactive until the user enables it and approves a task. The service is restricted to visible YouTube UI; typing and search submission require a focused visible field. Pause is accepted only between acknowledged steps.
+Each UI action is bound to the package selected by the preceding `launch_app` step. The service only acts while an approved task is active and the current visible window matches that package. The user must enable Android Accessibility explicitly.
 
-## Current implementation boundary
+## Safety boundary
 
-The server API, applied SQL migration, AI plan generation, typed-plan validation, Android plan-review dialog, and initial visible-UI Accessibility service are included. The phone app still needs a richer task-history/progress screen, resume UX, and end-to-end testing on a physical device. Current launch allowlist is YouTube only; no result is auto-played.
+The planner and validator block credential entry, payments, purchases, sending messages, publishing, deleting, sharing, transfers, account/security changes, permission grants, hidden control, browser automation, and arbitrary shell/code. Taps on labels that indicate consequential actions are blocked. Plans require review and approval, and approval expires after ten minutes. UI exposure varies by app and Android version; an app that hides controls from Accessibility may not be automatable.
+
+The Android module targets Android 10 (API 29) and later, without OEM-specific setup flows. Actual compatibility still depends on the app's UI, Android version, and vendor implementation. Device registration, browser automation, PC bridge, and voice commands remain out of scope for this increment.
+
+## Validation status
+
+CI and APK build must pass before this change is considered build-verified. Physical-device end-to-end testing is still required across representative Android versions and manufacturers.
