@@ -14,6 +14,8 @@ const ACTION_TYPES = new Set([
   "type_text",
   "press_back",
   "press_enter",
+  "scroll_forward",
+  "scroll_backward",
   "wait_for_ui",
   "report_state"
 ]);
@@ -62,7 +64,7 @@ function validateSteps(input, installedApps = null) {
         throw new Error("Only ordinary, non-sensitive text up to 200 characters can be typed.");
       }
       step.text = text;
-    } else if (type === "press_back" || type === "press_enter" || type === "report_state") {
+    } else if (type === "press_back" || type === "press_enter" || type === "scroll_forward" || type === "scroll_backward" || type === "report_state") {
       if (!currentPackage) throw new Error("Launch an app before interacting with its visible UI.");
       step.targetPackage = currentPackage;
     } else if (type === "wait_for_ui") {
