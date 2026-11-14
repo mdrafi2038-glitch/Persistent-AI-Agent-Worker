@@ -36,6 +36,8 @@ function validateSteps(input, installedApps = null) {
     throw new Error("A plan must contain 1 to 20 actions.");
   }
   let currentPackage = null;
+  let lastTypedText = null;
+  let lastWaitVisibleText = null;
   return input.map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid action at step " + (index + 1) + ".");
     const type = String(raw.type || "");
@@ -64,12 +66,14 @@ function validateSteps(input, installedApps = null) {
         throw new Error("Only ordinary, non-sensitive text within the app-specific limit can be typed.");
       }
       step.text = text;
+      lastTypedText = text;
     } else if (type === "confirm_publish") {
       if (!["com.facebook.katana", "com.facebook.lite"].includes(currentPackage)) throw new Error("Publishing confirmation is supported only in the Facebook app.");
       const buttonText = String(raw.buttonText || "").trim();
       const previewText = String(raw.previewText || "").trim();
       if (!["Post", "Publish", "পোস্ট", "প্রকাশ করুন"].includes(buttonText)) throw new Error("The publish button label is not allowlisted.");
       if (!previewText || previewText.length > 3000) throw new Error("A post preview of 1 to 3,000 characters is required.");
+      if (previewText !== lastTypedText || lastWaitVisibleText !== buttonText) throw new Error("Publishing requires the exact typed draft and a matching visible-button wait step.");
       step.targetPackage = currentPackage;
       step.buttonText = buttonText;
       step.previewText = previewText;
@@ -86,6 +90,7 @@ function validateSteps(input, installedApps = null) {
         const visibleText = String(raw.visibleText).trim();
         if (!visibleText || visibleText.length > 120) throw new Error("Invalid wait condition.");
         step.visibleText = visibleText;
+        lastWaitVisibleText = visibleText;
       }
     }
     return step;
