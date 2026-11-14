@@ -8,7 +8,7 @@ test("accepts a bounded YouTube visible UI plan", () => {
     { type: "find_visible_text", text: "Search", explanation: "Find the visible search control" },
     { type: "tap_visible_node", text: "Search", explanation: "Open search" },
     { type: "type_text", text: "instrumental music", explanation: "Enter the requested search" },
-    { type: "press_back", explanation: "Not used in this flow" }
+    { type: "press_enter", explanation: "Submit the search" }
   ]);
   assert.equal(steps.length, 5);
   assert.equal(planHash(steps).length, 64);
