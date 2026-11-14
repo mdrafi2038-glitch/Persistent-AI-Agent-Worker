@@ -31,7 +31,7 @@ All responses are marked \`Cache-Control: no-store\`. Unknown actions, arbitrary
 - \`wait_for_ui\`: bounded to 250–10,000 ms.
 - \`report_state\`.
 
-The API does not accept arbitrary gestures, code, shell commands, passwords, PINs, OTPs, payments, purchases, posts, or message sending. The Worker-owned Android app includes a plan-review dialog and an Accessibility service that is inactive until the user enables it and approves a task. The service is restricted to visible YouTube UI, and typing requires a focused visible search field. It must honor pause/cancel between steps.
+The API does not accept arbitrary gestures, code, shell commands, passwords, PINs, OTPs, payments, purchases, posts, or message sending. The Worker-owned Android app includes a plan-review dialog, a recent task history screen, pause/resume/cancel controls, and an Accessibility service that is inactive until the user enables it and approves a task. The service is restricted to visible YouTube UI; typing and search submission require a focused visible field. Pause is accepted only between acknowledged steps.
 
 ## Current implementation boundary
 
