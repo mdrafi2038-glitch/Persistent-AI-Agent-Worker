@@ -90,6 +90,11 @@ class MainActivity : Activity() {
         root.addView(row)
         addButton("Connect to Worker") { connectBridge() }
         addButton("AI Visible UI Assistant (YouTube search)") { submitVisibleUiTask(command.text.toString()) }
+        addButton("Approve pending UI plan") {
+            val taskId = pendingUiTaskId
+            val hash = pendingUiPlanHash
+            if (taskId != null && hash != null) approveVisibleUiTask(taskId, hash) else toast("কোনো pending plan নেই।")
+        }
         addButton("Enable Accessibility UI Assistance") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         addButton("Pause current UI task") { stopCurrentUiTask("pause") }
         addButton("Resume paused UI task") { resumePausedUiTask() }
@@ -148,6 +153,7 @@ class MainActivity : Activity() {
                     val taskId = task?.optString("id").orEmpty()
                     val plan = payload.optJSONArray("plan")
                     val hash = payload.optString("planHash")
+                    if (taskId.isNotBlank() && hash.isNotBlank()) { pendingUiTaskId = taskId; pendingUiPlanHash = hash }
                     if (taskId.isBlank() || plan == null || hash.isBlank()) {
                         result.text = "Plan পাওয়া যায়নি: " + payload.optString("error", "Try again.")
                         return@onSuccess
@@ -168,7 +174,10 @@ class MainActivity : Activity() {
                         .setPositiveButton("Approve & run") { _, _ -> approveVisibleUiTask(taskId, hash) }
                         .setNegativeButton("Reject") { _, _ ->
                             AndroidTaskClient.rejectTask(taskId) { rejected ->
-                                runOnUiThread { result.text = if (rejected.isSuccess) "Plan rejected." else "Could not reject plan." }
+                                runOnUiThread {
+                                    if (rejected.isSuccess) { pendingUiTaskId = null; pendingUiPlanHash = null }
+                                    result.text = if (rejected.isSuccess) "Plan rejected." else "Could not reject plan."
+                                }
                             }
                         }
                         .show()
@@ -201,6 +210,8 @@ class MainActivity : Activity() {
             runOnUiThread {
                 response.onSuccess {
                     activeUiTaskId = taskId
+                    pendingUiTaskId = null
+                    pendingUiPlanHash = null
                     pollInProgress = false
                     service.setApprovedTaskActive(true)
                     result.text = "Approved. YouTube UI steps চালানো হচ্ছে..."
