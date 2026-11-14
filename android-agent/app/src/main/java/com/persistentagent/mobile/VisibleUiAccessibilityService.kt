@@ -129,15 +129,19 @@ class VisibleUiAccessibilityService : AccessibilityService() {
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited = 0
+        var match: AccessibilityNodeInfo? = null
         while (queue.isNotEmpty() && visited < 350) {
             val node = queue.removeFirst()
             visited++
             val text = node.text?.toString().orEmpty()
             val description = node.contentDescription?.toString().orEmpty()
-            if (node.isVisibleToUser && (text.equals(target, true) || description.equals(target, true))) return node
+            if (node.isVisibleToUser && (text.equals(target, true) || description.equals(target, true))) {
+                if (match != null) return null
+                match = node
+            }
             for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
         }
-        return null
+        return match
     }
 
     private fun clickableAncestor(start: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
