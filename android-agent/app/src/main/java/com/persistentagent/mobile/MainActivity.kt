@@ -40,6 +40,8 @@ class MainActivity : Activity() {
     private val speechRequest = 410
     private val taskHandler = Handler(Looper.getMainLooper())
     private var activeUiTaskId: String? = null
+    private var pendingUiTaskId: String? = null
+    private var pendingUiPlanHash: String? = null
     private var pausedUiTaskId: String? = null
     private var pollInProgress = false
 
