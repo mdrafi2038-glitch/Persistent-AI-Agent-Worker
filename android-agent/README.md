@@ -20,4 +20,4 @@ The Worker now exposes authenticated task planning and approval routes under \`/
 
 The current API supports only a strict typed action allowlist and the YouTube package for app launch. Each plan requires explicit approval and expires after ten minutes. Actions are dispatched one at a time and require an acknowledgement. No device registration, browser automation, PC bridge, arbitrary shell, or hidden interaction is included.
 
-The native Android UI and Accessibility execution are still pending; this backend foundation does not yet mean the phone can execute remote UI tasks.
+The native app now includes an opt-in AccessibilityService, an approval preview, and an authenticated task runner for the initial YouTube-only action set. The debug APK still needs a successful CI build and device testing before these capabilities should be considered ready.
