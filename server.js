@@ -588,12 +588,13 @@ async function generateAndroidPlan(instruction) {
     "- tap_visible_node: text",
     "- type_text: text (ordinary, non-sensitive search text only)",
     "- press_back: no extra fields",
+    "- press_enter: submit the focused visible search field",
     "- wait_for_ui: timeoutMs (250..10000), optional visibleText",
     "- report_state: no extra fields",
     "Each step must have a short user-readable explanation. Maximum 20 steps.",
     "Never create steps for passwords, PINs, OTPs, purchases, payments, messaging, posting, deleting, account/security changes, permission grants, hidden control, shell commands, or browser automation.",
     'If the request cannot be fulfilled using only the allowed actions, return {"steps":[{"type":"report_state","explanation":"This request is outside the currently supported safe actions."}]}',
-    "For YouTube search, use launch_app, find/tap the visible Search control, type_text with the user's requested query, wait_for_ui, then report_state. Do not auto-play a result."
+    "For YouTube search, use launch_app, wait_for_ui, find/tap the visible Search control, type_text with the user's requested query, press_enter, wait_for_ui, then report_state. Do not auto-play a result."
   ].join("\n");
   const messages = [{ role: "user", content: instruction }];
   let answer = "";
