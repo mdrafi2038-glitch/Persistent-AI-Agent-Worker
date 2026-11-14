@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestRuntimePermissions()
+        pausedUiTaskId = getSharedPreferences("android_ui_task", MODE_PRIVATE).getString("paused_task_id", null)
         startForegroundService(Intent(this, AgentForegroundService::class.java))
         showHome()
     }
@@ -339,7 +340,13 @@ class MainActivity : Activity() {
         AndroidTaskClient.stopTask(taskId, operation) { response ->
             runOnUiThread {
                 response.onSuccess {
-                    if (operation == "pause") pausedUiTaskId = taskId else pausedUiTaskId = null
+                    if (operation == "pause") {
+                        pausedUiTaskId = taskId
+                        getSharedPreferences("android_ui_task", MODE_PRIVATE).edit().putString("paused_task_id", taskId).apply()
+                    } else {
+                        pausedUiTaskId = null
+                        getSharedPreferences("android_ui_task", MODE_PRIVATE).edit().remove("paused_task_id").apply()
+                    }
                     finishVisibleUiTask(if (operation == "pause") "Task paused. You can resume it from the Automation screen." else "Task cancelled.")
                 }.onFailure { error -> toast(error.message ?: "Could not stop task.") }
             }
@@ -358,6 +365,7 @@ class MainActivity : Activity() {
                 response.onSuccess {
                     activeUiTaskId = taskId
                     pausedUiTaskId = null
+                    getSharedPreferences("android_ui_task", MODE_PRIVATE).edit().remove("paused_task_id").apply()
                     pollInProgress = false
                     VisibleUiAccessibilityService.instance?.setApprovedTaskActive(true)
                     result.text = "Paused task resumed."
