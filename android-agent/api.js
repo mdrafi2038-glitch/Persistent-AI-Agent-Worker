@@ -30,7 +30,7 @@ function planHash(steps) {
   return crypto.createHash("sha256").update(canonical(steps)).digest("hex");
 }
 
-function validateSteps(input) {
+function validateSteps(input, installedApps = null) {
   if (!Array.isArray(input) || input.length < 1 || input.length > MAX_STEPS) {
     throw new Error("A plan must contain 1 to 20 actions.");
   }
@@ -44,6 +44,7 @@ function validateSteps(input) {
     if (type === "launch_app") {
       const packageName = String(raw.packageName || "");
       if (!PACKAGE_NAME.test(packageName) || BLOCKED_PACKAGES.has(packageName) || packageName.startsWith("com.persistentagent.")) throw new Error("This is not an eligible installed-app package.");
+      if (Array.isArray(installedApps) && installedApps.length > 0 && !installedApps.some(item => item.packageName === packageName)) throw new Error("The requested app is not in this phone's installed-app list.");
       step.packageName = packageName;
       currentPackage = packageName;
     } else if (type === "find_visible_text" || type === "tap_visible_node") {
@@ -116,7 +117,8 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
       if (error) throw error;
       createdTaskId = data.id;
       if (typeof generatePlan !== "function") return res.status(201).json({ task: data, next: "submit_plan" });
-      const steps = validateSteps(await generatePlan(instruction));
+      const installedApps = Array.isArray(req.body?.installedApps) ? req.body.installedApps.slice(0, 150) : null;
+      const steps = validateSteps(await generatePlan(instruction, installedApps), installedApps);
       const hash = planHash(steps);
       const { error: planError } = await supabase.from("android_agent_tasks")
         .update({ plan: steps, plan_hash: hash, status: "pending_approval", updated_at: new Date().toISOString() })
@@ -157,7 +159,7 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
       if (task.status !== "planning") return res.status(409).json({ error: "A plan can only be generated once while the task is planning." });
 
       let generated;
-      try { generated = await generatePlan(task.instruction); }
+      try { generated = await generatePlan(task.instruction, null); }
       catch (error) {
         console.error("android AI planning error:", error.message);
         return res.status(502).json({ error: "The AI could not create a safe action plan. You can retry planning." });
