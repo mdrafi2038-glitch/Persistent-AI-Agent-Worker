@@ -242,6 +242,8 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
         .select("id,step_index,action_type,payload,status").eq("task_id", task.id)
         .order("step_index", { ascending: true });
       if (error) throw error;
+      const inFlight = (actions || []).find(item => item.status === "dispatched");
+      if (inFlight) return res.json({ action: inFlight, redelivery: true, status: "waiting_for_current_action_result" });
       const next = (actions || []).find(item => item.status !== "completed");
       if (!next) {
         await supabase.from("android_agent_tasks").update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "approved");
