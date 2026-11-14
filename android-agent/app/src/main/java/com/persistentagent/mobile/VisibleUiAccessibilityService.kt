@@ -160,16 +160,22 @@ class VisibleUiAccessibilityService : AccessibilityService() {
 
     private fun findEditableNode(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (root == null) return null
+        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        if (focused != null && focused.isVisibleToUser && focused.isEditable && focused.isEnabled) return focused
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited = 0
+        var match: AccessibilityNodeInfo? = null
         while (queue.isNotEmpty() && visited < 350) {
             val node = queue.removeFirst()
             visited++
-            if (node.isVisibleToUser && node.isEditable && node.isEnabled) return node
+            if (node.isVisibleToUser && node.isEditable && node.isEnabled) {
+                if (match != null) return null
+                match = node
+            }
             for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
         }
-        return null
+        return match
     }
 
     companion object {
