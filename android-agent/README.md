@@ -12,3 +12,12 @@ Native Android shell plus embedded AI chat for the existing Render worker.
 
 ## Build
 GitHub Actions workflow `.github/workflows/android-apk.yml` builds a debug APK on push or manual dispatch. Download `Persistent-AI-Agent-debug-apk` from the workflow run's Artifacts section. Debug APK is for testing; production distribution should use a protected signing key.
+
+
+## Visible UI task API foundation
+
+The Worker now exposes authenticated task planning and approval routes under \`/api/android/tasks\`. See \`android-agent/API.md\` for the request/response lifecycle and \`supabase/migrations/20261114060000_android_visible_ui_tasks.sql\` for the database migration.
+
+The current API supports only a strict typed action allowlist and the YouTube package for app launch. Each plan requires explicit approval and expires after ten minutes. Actions are dispatched one at a time and require an acknowledgement. No device registration, browser automation, PC bridge, arbitrary shell, or hidden interaction is included.
+
+The native Android UI and Accessibility execution are still pending; this backend foundation does not yet mean the phone can execute remote UI tasks.
