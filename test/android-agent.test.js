@@ -31,6 +31,15 @@ test("rejects system settings, invalid packages, and arbitrary action types", ()
   assert.throws(() => validateSteps([{ type: "run_shell", command: "id", explanation: "Run command" }]), /Unsupported action/);
 });
 
+test("restricts app launch to the command-matched installed app list when provided", () => {
+  assert.throws(() => validateSteps([
+    { type: "launch_app", packageName: "com.spotify.music", explanation: "Open Spotify" }
+  ], [{ packageName: "com.google.android.youtube", label: "YouTube" }]), /not in this phone's installed-app list/);
+  assert.equal(validateSteps([
+    { type: "launch_app", packageName: "com.spotify.music", explanation: "Open Spotify" }
+  ], [{ packageName: "com.spotify.music", label: "Spotify" }])[0].packageName, "com.spotify.music");
+});
+
 test("rejects visible interactions without a launched app", () => {
   assert.throws(() => validateSteps([{ type: "tap_visible_node", text: "Search", explanation: "Tap search" }]), /Launch an app/);
 });
