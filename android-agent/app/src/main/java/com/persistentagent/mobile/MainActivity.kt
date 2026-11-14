@@ -406,5 +406,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    override fun onDestroy() { webView?.destroy(); super.onDestroy() }
+    override fun onDestroy() {
+        taskHandler.removeCallbacksAndMessages(null)
+        activeUiTaskId?.let { taskId -> AndroidTaskClient.stopTask(taskId, "cancel") {} }
+        VisibleUiAccessibilityService.instance?.setApprovedTaskActive(false)
+        webView?.destroy()
+        super.onDestroy()
+    }
 }
