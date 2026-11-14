@@ -16,6 +16,9 @@ object AndroidTaskClient {
     fun approveTask(taskId: String, planHash: String, callback: (Result<JSONObject>) -> Unit) =
         request("POST", "/api/android/tasks/$taskId/approve", JSONObject().put("planHash", planHash), callback)
 
+    fun getTask(taskId: String, callback: (Result<JSONObject>) -> Unit) =
+        request("GET", "/api/android/tasks/$taskId", null, callback)
+
     fun nextAction(taskId: String, callback: (Result<JSONObject>) -> Unit) =
         request("GET", "/api/android/tasks/$taskId/next-action", null, callback)
 
