@@ -26,17 +26,18 @@ All responses are marked `Cache-Control: no-store`. Unknown actions, invalid pac
 
 - `launch_app`: launch a normal installed app with a launcher activity. The phone sends only the names/package IDs of apps explicitly named in the command (up to five matches), and checks locally that the app is installed before launching.
 - `find_visible_text` / `tap_visible_node`: find an exact, unique visible label in the currently approved app.
-- `type_text`: enter ordinary non-sensitive text (maximum 200 characters) into a focused visible editable field.
+- `type_text`: enter ordinary non-sensitive text into a focused visible editable field (200 characters generally; up to 3,000 for a Facebook feed-post draft).
 - `press_enter`: submit a focused visible field only when the plan is a user-requested search/query. Android 10 may not expose the required IME action; in that case the step is blocked rather than simulated.
 - `press_back`: navigate back within the approved active app.
 - `wait_for_ui`: bounded to 250–10,000 ms.
 - `report_state`: report whether the approved app is currently active without storing a screen dump.
+- `confirm_publish`: Facebook feed-post only. The server accepts it only after the exact draft was entered and a matching visible Post/Publish button was observed. Android then shows a separate on-device confirmation dialog with the full draft; only tapping **Publish now** triggers the exact visible Facebook button. Cancel stops the task.
 
 Each UI action is bound to the package selected by the preceding `launch_app` step. The service only acts while an approved task is active and the current visible window matches that package. The user must enable Android Accessibility explicitly.
 
 ## Safety boundary
 
-The planner and validator block credential entry, payments, purchases, sending messages, publishing, deleting, sharing, transfers, account/security changes, permission grants, hidden control, browser automation, and arbitrary shell/code. Taps on labels that indicate consequential actions are blocked. Plans require review and approval, and approval expires after ten minutes. UI exposure varies by app and Android version; an app that hides controls from Accessibility may not be automatable.
+The planner and validator block credential entry, payments, purchases, sending messages, deleting, sharing, transfers, account/security changes, permission grants, hidden control, browser automation, and arbitrary shell/code. The only publishing exception is a user-requested Facebook feed post in the Facebook or Facebook Lite app, guarded by a second, exact-draft confirmation dialog on the phone. Group/page posting, tagging, and other apps remain unsupported. Taps on labels that indicate consequential actions are blocked. Plans require review and approval, and approval expires after ten minutes. UI exposure varies by app and Android version; an app that hides controls from Accessibility may not be automatable.
 
 The Android module targets Android 10 (API 29) and later, without OEM-specific setup flows. Actual compatibility still depends on the app's UI, Android version, and vendor implementation. Device registration, browser automation, PC bridge, and voice commands remain out of scope for this increment.
 
