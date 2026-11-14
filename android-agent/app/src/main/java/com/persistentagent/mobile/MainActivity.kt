@@ -148,18 +148,20 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun getLaunchableApps(): JSONArray {
+    private fun getLaunchableApps(instruction: String): JSONArray {
         val apps = JSONArray()
         val blocked = setOf("com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller", "com.persistentagent.mobile")
+        val command = instruction.lowercase(Locale.ROOT)
         val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
             .filter { app -> app.packageName !in blocked && !app.packageName.startsWith("com.persistentagent.") }
             .mapNotNull { app ->
-                val launchIntent = packageManager.getLaunchIntentForPackage(app.packageName) ?: return@mapNotNull null
+                if (packageManager.getLaunchIntentForPackage(app.packageName) == null) return@mapNotNull null
                 val label = packageManager.getApplicationLabel(app).toString().take(80)
+                if (!command.contains(label.lowercase(Locale.ROOT)) && !command.contains(app.packageName.lowercase(Locale.ROOT))) return@mapNotNull null
                 JSONObject().put("packageName", app.packageName).put("label", label)
             }
             .distinctBy { it.optString("packageName") }
-            .take(150)
+            .take(5)
         installed.forEach(apps::put)
         return apps
     }
@@ -167,7 +169,7 @@ class MainActivity : Activity() {
     private fun submitVisibleUiTask(instruction: String) {
         if (instruction.isBlank()) { toast("আগে একটি নির্দেশ লিখুন।"); return }
         result.text = "AI নিরাপদ UI plan তৈরি করছে..."
-        AndroidTaskClient.createTask(instruction, getLaunchableApps()) { response ->
+        AndroidTaskClient.createTask(instruction, getLaunchableApps(instruction)) { response ->
             runOnUiThread {
                 response.onSuccess { payload ->
                     val task = payload.optJSONObject("task")
