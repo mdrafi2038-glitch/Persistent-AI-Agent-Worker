@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private val speechRequest = 410
     private val taskHandler = Handler(Looper.getMainLooper())
     private var activeUiTaskId: String? = null
+    private var pausedUiTaskId: String? = null
     private var pollInProgress = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
         addButton("AI Visible UI Assistant (YouTube search)") { submitVisibleUiTask(command.text.toString()) }
         addButton("Enable Accessibility UI Assistance") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         addButton("Pause current UI task") { stopCurrentUiTask("pause") }
+        addButton("Resume paused UI task") { resumePausedUiTask() }
         addButton("Cancel current UI task") { stopCurrentUiTask("cancel") }
         addButton("Set reminder (choose date & time)") { chooseReminder() }
         addButton("Open app by name") { openApp(command.text.toString()) }
@@ -319,12 +321,36 @@ class MainActivity : ComponentActivity() {
         AndroidTaskClient.stopTask(taskId, operation) { response ->
             runOnUiThread {
                 response.onSuccess {
-                    finishVisibleUiTask(if (operation == "pause") "Task paused." else "Task cancelled.")
+                    if (operation == "pause") pausedUiTaskId = taskId else pausedUiTaskId = null
+                    finishVisibleUiTask(if (operation == "pause") "Task paused. You can resume it from the Automation screen." else "Task cancelled.")
                 }.onFailure { error -> toast(error.message ?: "Could not stop task.") }
             }
         }
     }
 
+    private fun resumePausedUiTask() {
+        val taskId = pausedUiTaskId ?: run { toast("কোনো paused UI task নেই।"); return }
+        if (!isAccessibilityEnabled()) {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            toast("Resume করার আগে Accessibility permission চালু করুন।")
+            return
+        }
+        AndroidTaskClient.resumeTask(taskId) { response ->
+            runOnUiThread {
+                response.onSuccess {
+                    activeUiTaskId = taskId
+                    pausedUiTaskId = null
+                    pollInProgress = false
+                    VisibleUiAccessibilityService.instance?.setApprovedTaskActive(true)
+                    result.text = "Paused task resumed."
+                    pollVisibleUiTask()
+                }.onFailure { error ->
+                    result.text = error.message ?: "Could not resume task."
+                    toast(result.text.toString())
+                }
+            }
+        }
+    }
     private fun startVoice() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 21)
