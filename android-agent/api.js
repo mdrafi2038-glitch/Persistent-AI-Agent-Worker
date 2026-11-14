@@ -117,7 +117,7 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
     } catch (error) {
       if (createdTaskId) await supabase.from("android_agent_tasks").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", createdTaskId).eq("status", "planning");
       console.error("android task create error:", error.message);
-      return res.status(500).json({ error: "Could not create Android task." });
+      return res.status(502).json({ error: error.message || "Could not create Android task." });
     }
   });
 
