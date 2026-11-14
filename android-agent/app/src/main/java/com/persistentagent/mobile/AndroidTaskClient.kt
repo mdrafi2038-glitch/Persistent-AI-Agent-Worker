@@ -22,6 +22,9 @@ object AndroidTaskClient {
     fun resumeTask(taskId: String, callback: (Result<JSONObject>) -> Unit) =
         request("POST", "/api/android/tasks/$taskId/resume", JSONObject(), callback)
 
+    fun listTasks(callback: (Result<JSONObject>) -> Unit) =
+        request("GET", "/api/android/tasks", null, callback)
+
     fun getTask(taskId: String, callback: (Result<JSONObject>) -> Unit) =
         request("GET", "/api/android/tasks/$taskId", null, callback)
 
