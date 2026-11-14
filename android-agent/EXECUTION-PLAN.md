@@ -63,7 +63,7 @@ Each action must have a strict schema, bounded input length, timeout, and allowe
 
 ## Android implementation boundary
 
-Create a standalone Android application module under `android-companion/` with its own Gradle settings, application ID, manifest, UI, and AccessibilityService. It must not share source files or application IDs with the user's other Android projects.
+Extend the existing Worker-owned native Android app under `android-agent/app/`. This app lives in this repository and is separate from the user's other Personal Agent repositories. Keep its existing chat, reminder, and local features intact; add the AccessibilityService only here.
 
 The AccessibilityService should:
 - Be disabled until the user enables it.
