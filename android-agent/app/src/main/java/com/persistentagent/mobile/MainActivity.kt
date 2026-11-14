@@ -158,7 +158,7 @@ class MainActivity : Activity() {
             }
             .distinctBy { it.optString("packageName") }
             .take(5)
-        installed.forEach(apps::put)
+        installed.forEach { apps.put(it) }
         return apps
     }
 
