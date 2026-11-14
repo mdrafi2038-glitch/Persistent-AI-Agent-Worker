@@ -11,6 +11,7 @@ const ACTION_TYPES = new Set([
   "tap_visible_node",
   "type_text",
   "press_back",
+  "press_enter",
   "wait_for_ui",
   "report_state"
 ]);
