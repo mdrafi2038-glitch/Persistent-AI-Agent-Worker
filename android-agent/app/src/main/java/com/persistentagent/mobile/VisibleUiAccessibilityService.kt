@@ -2,6 +2,8 @@ package com.persistentagent.mobile
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.app.AlertDialog
+import android.view.WindowManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -83,7 +85,7 @@ class VisibleUiAccessibilityService : AccessibilityService() {
             "type_text" -> {
                 val text = action.optString("text")
                 if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
-                else if (text.length > 200 || SENSITIVE_TEXT.containsMatchIn(text)) callback("blocked", "Sensitive or oversized text is not allowed.")
+                else if (text.length > (if (targetPackage == "com.facebook.katana" || targetPackage == "com.facebook.lite") 3000 else 200) || SENSITIVE_TEXT.containsMatchIn(text)) callback("blocked", "Sensitive or oversized text is not allowed.")
                 else {
                     val field = findEditableNode(root)
                     if (field == null || !field.isFocused) callback("blocked", "No focused visible text field is available.")
@@ -94,6 +96,7 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                     }
                 }
             }
+            "confirm_publish" -> showPublishConfirmation(action, callback)
             "press_enter" -> {
                 if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
                 else if (android.os.Build.VERSION.SDK_INT < 30) callback("blocked", "This Android version does not expose the supported visible IME submit action.")
@@ -124,6 +127,50 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                 callback(if (matches) "completed" else "blocked", if (matches) "The approved app is active. Screen text was not stored." else "The approved app is not the active visible app.")
             }
             else -> callback("blocked", "Unsupported action type.")
+        }
+    }
+
+    private fun showPublishConfirmation(action: JSONObject, callback: (String, String) -> Unit) {
+        val targetPackage = action.optString("targetPackage")
+        val buttonText = action.optString("buttonText")
+        val previewText = action.optString("previewText")
+        if (targetPackage !in setOf("com.facebook.katana", "com.facebook.lite") ||
+            buttonText !in setOf("Post", "Publish", "পোস্ট", "প্রকাশ করুন") ||
+            previewText.isBlank() || previewText.length > 3000 ||
+            !isTargetApp(rootInActiveWindow, targetPackage)) {
+            callback("blocked", "Facebook post confirmation is not valid for the current visible screen.")
+            return
+        }
+        try {
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("Confirm Facebook post")
+                .setMessage("Review this exact post. It will be published only if you choose Publish now.\n\n" + previewText)
+                .setNegativeButton("Cancel") { d, _ ->
+                    d.dismiss()
+                    callback("blocked", "You cancelled publishing. No post was submitted.")
+                }
+                .setPositiveButton("Publish now", null)
+                .create()
+            dialog.window?.setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY)
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    dialog.dismiss()
+                    val currentRoot = rootInActiveWindow
+                    if (!taskActive || !isTargetApp(currentRoot, targetPackage)) {
+                        callback("blocked", "Facebook is no longer the active app. Nothing was published.")
+                        return@setOnClickListener
+                    }
+                    val node = findVisibleNode(currentRoot, buttonText)
+                    val clickable = clickableAncestor(node)
+                    val clicked = clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+                    callback(if (clicked) "completed" else "failed",
+                        if (clicked) "The user explicitly confirmed and the visible Facebook publish control was tapped."
+                        else "The exact publish control was not uniquely visible. Nothing was submitted.")
+                }
+            }
+            dialog.show()
+        } catch (error: Exception) {
+            callback("blocked", "Could not display the required publish confirmation: " + (error.message ?: "unknown error"))
         }
     }
 

@@ -46,6 +46,7 @@ Allowlist typed actions rather than accepting arbitrary instructions from the mo
 - `press_back`: navigate back one screen.
 - `wait_for_ui`: wait for a bounded UI condition with a strict timeout.
 - `report_state`: return a sanitized summary of the visible screen and current step.
+- `confirm_publish`: Facebook feed-post only; verifies the exact draft and visible publish button, then requires a separate on-device confirmation.
 
 Each action must have a strict schema, bounded input length, timeout, and allowed-app/context checks. No generic "execute", shell, JavaScript, file-system, or arbitrary gesture action is permitted.
 
@@ -53,7 +54,7 @@ Each action must have a strict schema, bounded input length, timeout, and allowe
 
 - The user must explicitly enable Android Accessibility Service in Android Settings. Explain why it is needed and how to disable it.
 - Approval is required before starting an execution plan. Require a new confirmation for any newly introduced step, unexpected destination, or materially changed plan.
-- Require explicit per-step confirmation for sending messages, publishing/posting, purchases, payments, deleting data, changing account/security settings, granting permissions, or other externally consequential/irreversible actions. These categories should initially be blocked rather than automated.
+- Keep sending messages, purchases, payments, deleting data, changing account/security settings, granting permissions, and other consequential actions blocked. A narrowly scoped Facebook feed-post action may be supported only when the user explicitly requests it, the exact draft is shown in a separate on-device confirmation dialog, and the user taps Publish now. Never auto-publish or reuse an earlier plan approval as publish consent.
 - Never request, read, store, type, or transmit passwords, PINs, OTPs, recovery codes, or payment credentials.
 - Never bypass login, CAPTCHA, paywalls, permission dialogs, or app security controls.
 - Do not interact with hidden/off-screen UI or claim an action occurred when the visible UI cannot verify it.

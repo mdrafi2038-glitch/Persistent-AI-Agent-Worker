@@ -15,7 +15,8 @@ const ACTION_TYPES = new Set([
   "press_back",
   "press_enter",
   "wait_for_ui",
-  "report_state"
+  "report_state",
+  "confirm_publish"
 ]);
 
 function canonical(value) {
@@ -35,6 +36,8 @@ function validateSteps(input, installedApps = null) {
     throw new Error("A plan must contain 1 to 20 actions.");
   }
   let currentPackage = null;
+  let lastTypedText = null;
+  let lastWaitVisibleText = null;
   return input.map((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Invalid action at step " + (index + 1) + ".");
     const type = String(raw.type || "");
@@ -47,6 +50,8 @@ function validateSteps(input, installedApps = null) {
       if (Array.isArray(installedApps) && installedApps.length > 0 && !installedApps.some(item => item.packageName === packageName)) throw new Error("The requested app is not in this phone's installed-app list.");
       step.packageName = packageName;
       currentPackage = packageName;
+      lastTypedText = null;
+      lastWaitVisibleText = null;
     } else if (type === "find_visible_text" || type === "tap_visible_node") {
       const text = String(raw.text || "").trim();
       if (!currentPackage) throw new Error("Launch an app before interacting with its visible UI.");
@@ -58,10 +63,24 @@ function validateSteps(input, installedApps = null) {
       if (!currentPackage) throw new Error("Launch an app before typing into its visible UI.");
       step.targetPackage = currentPackage;
       const text = String(raw.text || "");
-      if (!text.trim() || text.length > 200 || /\b(password|passcode|pin|otp|one.time.password|recovery.code)\b/i.test(text)) {
-        throw new Error("Only ordinary, non-sensitive text up to 200 characters can be typed.");
+      const maxLength = ["com.facebook.katana", "com.facebook.lite"].includes(currentPackage) ? 3000 : 200;
+      if (!text.trim() || text.length > maxLength || /\b(password|passcode|pin|otp|one.time.password|recovery.code)\b/i.test(text)) {
+        throw new Error("Only ordinary, non-sensitive text within the app-specific limit can be typed.");
       }
       step.text = text;
+      lastTypedText = text;
+      lastWaitVisibleText = null;
+    } else if (type === "confirm_publish") {
+      if (index !== input.length - 1) throw new Error("The publish confirmation must be the final plan step.");
+      if (!["com.facebook.katana", "com.facebook.lite"].includes(currentPackage)) throw new Error("Publishing confirmation is supported only in the Facebook app.");
+      const buttonText = String(raw.buttonText || "").trim();
+      const previewText = String(raw.previewText || "").trim();
+      if (!["Post", "Publish", "পোস্ট", "প্রকাশ করুন"].includes(buttonText)) throw new Error("The publish button label is not allowlisted.");
+      if (!previewText || previewText.length > 3000) throw new Error("A post preview of 1 to 3,000 characters is required.");
+      if (previewText !== lastTypedText || lastWaitVisibleText !== buttonText) throw new Error("Publishing requires the exact typed draft and a matching visible-button wait step.");
+      step.targetPackage = currentPackage;
+      step.buttonText = buttonText;
+      step.previewText = previewText;
     } else if (type === "press_back" || type === "press_enter" || type === "report_state") {
       if (!currentPackage) throw new Error("Launch an app before interacting with its visible UI.");
       step.targetPackage = currentPackage;
@@ -75,6 +94,7 @@ function validateSteps(input, installedApps = null) {
         const visibleText = String(raw.visibleText).trim();
         if (!visibleText || visibleText.length > 120) throw new Error("Invalid wait condition.");
         step.visibleText = visibleText;
+        lastWaitVisibleText = visibleText;
       }
     }
     return step;
