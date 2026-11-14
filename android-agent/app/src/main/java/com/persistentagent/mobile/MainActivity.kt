@@ -25,12 +25,12 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import android.app.Activity
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.Locale
 
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
     private val agentUrl = "https://persistent-ai-agent-worker.onrender.com"
     private lateinit var root: LinearLayout
     private lateinit var command: EditText
