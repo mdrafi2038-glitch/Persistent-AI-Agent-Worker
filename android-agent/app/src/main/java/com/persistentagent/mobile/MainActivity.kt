@@ -146,7 +146,7 @@ class MainActivity : Activity() {
 
     private fun getLaunchableApps(instruction: String): JSONArray {
         val apps = JSONArray()
-        val blocked = setOf("com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller", "com.persistentagent.mobile")
+        val blocked = setOf("com.android.settings", "com.android.permissioncontroller", "com.google.android.permissioncontroller", "com.android.packageinstaller", "com.google.android.packageinstaller", "com.persistentagent.mobile")
         val command = instruction.lowercase(Locale.ROOT)
         val installed = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
             .filter { app -> app.packageName !in blocked && !app.packageName.startsWith("com.persistentagent.") }
