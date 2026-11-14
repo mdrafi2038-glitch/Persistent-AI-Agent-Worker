@@ -92,7 +92,7 @@ class MainActivity : Activity() {
         row.addView(button("Run command") { runCommand(command.text.toString()) }, weight())
         root.addView(row)
         addButton("Connect to Worker") { connectBridge() }
-        addButton("AI Visible UI Assistant (YouTube search)") { submitVisibleUiTask(command.text.toString()) }
+        addButton("AI Visible UI Assistant (Android apps)") { submitVisibleUiTask(command.text.toString()) }
         addButton("Approve pending UI plan") {
             val taskId = pendingUiTaskId
             val hash = pendingUiPlanHash
@@ -218,7 +218,7 @@ class MainActivity : Activity() {
                     pendingUiPlanHash = null
                     pollInProgress = false
                     service.setApprovedTaskActive(true)
-                    result.text = "Approved. YouTube UI steps চালানো হচ্ছে..."
+                    result.text = "Approved. Android app UI steps চালানো হচ্ছে..."
                     pollVisibleUiTask()
                 }.onFailure { error ->
                     result.text = "Approval failed: " + (error.message ?: "Unknown error")
@@ -309,7 +309,7 @@ class MainActivity : Activity() {
                 response.onSuccess { payload ->
                     val status = payload.optJSONObject("task")?.optString("status").orEmpty()
                     when (status) {
-                        "completed" -> finishVisibleUiTask("Task completed. YouTube search screen checked.")
+                        "completed" -> finishVisibleUiTask("Task completed. Visible app state checked.")
                         "failed" -> finishVisibleUiTask("Task failed. Review the phone screen and task history.")
                         "blocked" -> finishVisibleUiTask("Task stopped by a safety boundary.")
                         "cancelled" -> finishVisibleUiTask("Task cancelled.")
