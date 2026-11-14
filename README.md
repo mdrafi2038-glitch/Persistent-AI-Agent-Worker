@@ -67,3 +67,12 @@ Optional Render environment variables:
 Keep these credentials server-side in Render Environment. Never put them in browser code or chat messages. Use a GitHub token with the narrowest repository permissions needed (Contents: read/write; Pull requests: read/write). The agent writes only to branches named `agent/task-...`; it cannot write to the default branch, merge pull requests, deploy, delete repositories, or modify secrets/workflows/deployment configuration. Draft PRs require human review.
 
 Tool availability is shown by the authenticated `/api/status` endpoint. Browser automation, direct Android/PC control, arbitrary shell execution, and approval workflows are not included in this increment. Render Free may sleep while idle, so scheduled work is not guaranteed to run continuously.
+
+
+## Android visible UI assistance (in progress)
+
+The Worker-owned Android app has a guarded YouTube-only visible UI flow. It asks the AI provider for a typed plan, shows that plan for approval, then uses Android Accessibility only while the approved task is active. The initial tap allowlist is limited to YouTube's Search control; it will not tap a video result or auto-play. Typing is limited to a focused visible YouTube search field.
+
+Before testing, run `supabase/migrations/20261114000000_android_agent.sql` in addition to `schema.sql`. The server requires the existing authenticated Worker session and Supabase service-role configuration. See `android-agent/API.md` for endpoint details.
+
+The companion APK workflow now also runs on feature branches. Device registration, browser automation, PC bridge, and new voice-command work remain out of scope. A physical-device end-to-end test is still required before this feature should be considered complete.
