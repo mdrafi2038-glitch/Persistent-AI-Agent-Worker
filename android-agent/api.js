@@ -44,6 +44,7 @@ function validateSteps(input) {
     } else if (type === "find_visible_text" || type === "tap_visible_node") {
       const text = String(raw.text || "").trim();
       if (!text || text.length > 120) throw new Error("Visible text selector must be 1 to 120 characters.");
+      if (type === "tap_visible_node" && /^(send|buy|purchase|pay|delete|remove|unsubscribe|subscribe|post|publish|share|sign out|log out|change password|security|grant|allow|install|confirm|place order)$/i.test(text)) throw new Error("This action target requires a separate safety flow and is not supported.");
       step.text = text;
     } else if (type === "type_text") {
       const text = String(raw.text || "");
@@ -132,25 +133,41 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
 
   app.post(base + "/:id/plan", async (req, res) => {
     if (!requireDb(res)) return;
-    let steps;
-    try { steps = validateSteps(req.body?.steps); }
-    catch (error) { return res.status(400).json({ error: error.message }); }
+    if (typeof createPlan !== "function") return res.status(503).json({ error: "AI plan generation is not configured." });
     try {
       const task = await getTask(req.params.id);
       if (!task) return res.status(404).json({ error: "Task not found." });
-      if (task.status !== "planning") return res.status(409).json({ error: "A plan can only be submitted once while the task is planning." });
+      if (task.status !== "planning") return res.status(409).json({ error: "A plan can only be generated once while the task is planning." });
+
+      let generated;
+      try { generated = await createPlan(task.instruction); }
+      catch (error) {
+        console.error("android AI planning error:", error.message);
+        return res.status(502).json({ error: "The AI could not create a safe action plan. You can retry planning." });
+      }
+      let steps;
+      try { steps = validateSteps(Array.isArray(generated) ? generated : generated?.steps); }
+      catch (error) { return res.status(422).json({ error: "The AI plan did not pass safety validation: " + error.message }); }
+
       const hash = planHash(steps);
-      const { error } = await supabase.from("android_agent_tasks")
-        .update({ plan: steps, plan_hash: hash, status: "pending_approval", updated_at: new Date().toISOString() })
-        .eq("id", task.id).eq("status", "planning");
-      if (error) throw error;
+      const now = new Date().toISOString();
+      const { data: updated, error: updateError } = await supabase.from("android_agent_tasks")
+        .update({ plan: steps, plan_hash: hash, status: "pending_approval", updated_at: now })
+        .eq("id", task.id).eq("status", "planning").select("id").maybeSingle();
+      if (updateError) throw updateError;
+      if (!updated) return res.status(409).json({ error: "This task was already planned. Refresh its status." });
+
       const { error: insertError } = await supabase.from("android_agent_actions").insert(
         steps.map((step, index) => ({ task_id: task.id, step_index: index, action_type: step.type, payload: step, status: "queued" }))
       );
-      if (insertError) throw insertError;
+      if (insertError) {
+        await supabase.from("android_agent_tasks").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "pending_approval");
+        await supabase.from("android_agent_actions").delete().eq("task_id", task.id);
+        throw insertError;
+      }
       return res.status(201).json({ taskId: task.id, status: "pending_approval", plan: steps, planHash: hash, approvalExpiresInSeconds: APPROVAL_TTL_MS / 1000 });
     } catch (error) {
-      console.error("android plan error:", error.message);
+      console.error("android plan save error:", error.message);
       return res.status(500).json({ error: "Could not save Android plan." });
     }
   });
@@ -220,21 +237,21 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
         await supabase.from("android_agent_tasks").update({ status: "approval_expired", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "approved");
         return res.status(410).json({ error: "Approval expired. Review and approve the plan again." });
       }
-      const { data: inFlight, error: inFlightError } = await supabase.from("android_agent_actions")
-        .select("id,step_index,action_type,payload").eq("task_id", task.id).eq("status", "dispatched")
-        .order("step_index", { ascending: true }).limit(1);
-      if (inFlightError) throw inFlightError;
-      if (inFlight?.length) return res.json({ action: inFlight[0], redelivery: true, status: "waiting_for_current_action_result" });
-      const { data: queued, error } = await supabase.from("android_agent_actions")
-        .select("id,step_index,action_type,payload")
-        .eq("task_id", task.id).eq("status", "queued")
-        .order("step_index", { ascending: true }).limit(1);
+      const { data: actions, error } = await supabase.from("android_agent_actions")
+        .select("id,step_index,action_type,payload,status").eq("task_id", task.id)
+        .order("step_index", { ascending: true });
       if (error) throw error;
-      if (!queued?.length) return res.json({ action: null, status: "awaiting_results_or_complete" });
-      const action = queued[0];
+      const next = (actions || []).find(item => item.status !== "completed");
+      if (!next) {
+        await supabase.from("android_agent_tasks").update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "approved");
+        return res.json({ action: null, status: "completed" });
+      }
+      if (next.status === "dispatched") return res.status(409).json({ error: "The previous action is still awaiting its result. Do not execute another step." });
+      if (next.status !== "queued") return res.status(409).json({ error: "The next action is not executable in its current state." });
+      const now = new Date().toISOString();
       const { data: claimed, error: claimError } = await supabase.from("android_agent_actions")
-        .update({ status: "dispatched", dispatched_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq("id", action.id).eq("status", "queued")
+        .update({ status: "dispatched", dispatched_at: now, updated_at: now })
+        .eq("id", next.id).eq("status", "queued")
         .select("id,step_index,action_type,payload").maybeSingle();
       if (claimError) throw claimError;
       if (!claimed) return res.status(409).json({ error: "Action was claimed by another poll. Retry shortly." });
@@ -255,50 +272,94 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
     try {
       const task = await getTask(req.params.id);
       if (!task) return res.status(404).json({ error: "Task not found." });
-      if (task.status !== "approved" || new Date(task.approval_expires_at || 0).getTime() <= Date.now()) return res.status(409).json({ error: "Task is not currently approved." });
+      if (!["approved", "paused"].includes(task.status) || new Date(task.approval_expires_at || 0).getTime() <= Date.now()) return res.status(409).json({ error: "Task is not currently approved." });
+      const { data: ordered, error: orderError } = await supabase.from("android_agent_actions")
+        .select("id,step_index,status").eq("task_id", task.id).order("step_index", { ascending: true });
+      if (orderError) throw orderError;
+      const expected = (ordered || []).find(item => item.status !== "completed");
+      if (!expected || expected.id !== actionId || expected.status !== "dispatched") return res.status(409).json({ error: "Only the currently dispatched step can be acknowledged, in order." });
+      const now = new Date().toISOString();
       const { data: action, error } = await supabase.from("android_agent_actions")
-        .update({ status, result, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({ status, result, completed_at: now, updated_at: now })
         .eq("id", actionId).eq("task_id", task.id).eq("status", "dispatched")
         .select("id,step_index,status").maybeSingle();
       if (error) throw error;
       if (!action) return res.status(409).json({ error: "Action was already acknowledged or was not dispatched." });
+      if (task.status === "paused") return res.json({ action, taskStatus: "paused" });
       if (status !== "completed") {
-        await supabase.from("android_agent_tasks").update({ status: status === "blocked" ? "blocked" : "failed", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "approved");
-      } else {
-        const { data: remaining, error: remainingError } = await supabase.from("android_agent_actions")
-          .select("id").eq("task_id", task.id).in("status", ["queued", "dispatched"]).limit(1);
-        if (remainingError) throw remainingError;
-        if (!remaining?.length) await supabase.from("android_agent_tasks")
-          .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq("id", task.id).eq("status", "approved");
+        await supabase.from("android_agent_tasks").update({ status: status === "blocked" ? "blocked" : "failed", updated_at: now }).eq("id", task.id).eq("status", "approved");
+        await supabase.from("android_agent_actions").update({ status: "cancelled", updated_at: now }).eq("task_id", task.id).eq("status", "queued");
+        return res.json({ action, taskStatus: status === "blocked" ? "blocked" : "failed" });
       }
-      return res.json({ action, taskStatus: status === "completed" ? "in_progress_or_completed" : (status === "blocked" ? "blocked" : "failed") });
+      const { data: remaining, error: remainingError } = await supabase.from("android_agent_actions")
+        .select("id").eq("task_id", task.id).neq("status", "completed").limit(1);
+      if (remainingError) throw remainingError;
+      if (!remaining?.length) {
+        await supabase.from("android_agent_tasks").update({ status: "completed", completed_at: now, updated_at: now }).eq("id", task.id).eq("status", "approved");
+        return res.json({ action, taskStatus: "completed" });
+      }
+      return res.json({ action, taskStatus: "approved" });
     } catch (error) {
       console.error("android action result error:", error.message);
       return res.status(500).json({ error: "Could not save action result." });
     }
   });
 
-  for (const operation of ["pause", "cancel"]) {
-    app.post(base + "/:id/" + operation, async (req, res) => {
-      if (!requireDb(res)) return;
-      const nextStatus = operation === "pause" ? "paused" : "cancelled";
-      try {
-        const { data, error } = await supabase.from("android_agent_tasks")
-          .update({ status: nextStatus, updated_at: new Date().toISOString() })
-          .eq("id", req.params.id).in("status", ["planning", "pending_approval", "approved"])
-          .select("id,status").maybeSingle();
-        if (error) throw error;
-        if (!data) return res.status(409).json({ error: "Task cannot be " + operation + "d from its current state." });
-        await supabase.from("android_agent_actions").update({ status: "cancelled", updated_at: new Date().toISOString() })
-          .eq("task_id", req.params.id).in("status", ["queued", "dispatched"]);
-        return res.json({ task: data });
-      } catch (error) {
-        console.error("android task " + operation + " error:", error.message);
-        return res.status(500).json({ error: "Could not " + operation + " Android task." });
+  app.post(base + "/:id/pause", async (req, res) => {
+    if (!requireDb(res)) return;
+    try {
+      const { data, error } = await supabase.from("android_agent_tasks")
+        .update({ status: "paused", updated_at: new Date().toISOString() })
+        .eq("id", req.params.id).eq("status", "approved").select("id,status").maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(409).json({ error: "Only an approved task can be paused." });
+      return res.json({ task: data });
+    } catch (error) {
+      console.error("android task pause error:", error.message);
+      return res.status(500).json({ error: "Could not pause Android task." });
+    }
+  });
+
+  app.post(base + "/:id/resume", async (req, res) => {
+    if (!requireDb(res)) return;
+    try {
+      const task = await getTask(req.params.id);
+      if (!task) return res.status(404).json({ error: "Task not found." });
+      if (task.status !== "paused") return res.status(409).json({ error: "Only a paused task can be resumed." });
+      if (!task.approval_expires_at || new Date(task.approval_expires_at).getTime() <= Date.now()) {
+        await supabase.from("android_agent_tasks").update({ status: "approval_expired", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "paused");
+        return res.status(410).json({ error: "Approval expired. Review and approve a new plan." });
       }
-    });
-  }
+      const { data, error } = await supabase.from("android_agent_tasks")
+        .update({ status: "approved", updated_at: new Date().toISOString() })
+        .eq("id", task.id).eq("status", "paused").select("id,status").maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(409).json({ error: "Task state changed. Refresh and try again." });
+      return res.json({ task: data });
+    } catch (error) {
+      console.error("android task resume error:", error.message);
+      return res.status(500).json({ error: "Could not resume Android task." });
+    }
+  });
+
+  app.post(base + "/:id/cancel", async (req, res) => {
+    if (!requireDb(res)) return;
+    try {
+      const { data, error } = await supabase.from("android_agent_tasks")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("id", req.params.id).in("status", ["planning", "pending_approval", "approved", "paused"])
+        .select("id,status").maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(409).json({ error: "Task cannot be cancelled from its current state." });
+      await supabase.from("android_agent_actions").update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("task_id", req.params.id).in("status", ["queued", "dispatched"]);
+      return res.json({ task: data });
+    } catch (error) {
+      console.error("android task cancel error:", error.message);
+      return res.status(500).json({ error: "Could not cancel Android task." });
+    }
+  });
+
 }
 
 function safeHash(candidate, expected) {
