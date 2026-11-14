@@ -57,7 +57,6 @@ class MainActivity : Activity() {
     private fun requestRuntimePermissions() {
         val permissions = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) permissions += Manifest.permission.POST_NOTIFICATIONS
-        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) permissions += Manifest.permission.RECORD_AUDIO
         if (permissions.isNotEmpty()) requestPermissions(permissions.toTypedArray(), 21)
     }
 
@@ -88,10 +87,7 @@ class MainActivity : Activity() {
         })
         command = EditText(this).apply { hint = "যেমন: open settings / remind me to call home"; minLines = 2 }
         root.addView(command, LinearLayout.LayoutParams(-1, -2))
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(button("🎙 Voice") { startVoice() }, weight())
-        row.addView(button("Run command") { runCommand(command.text.toString()) }, weight())
-        root.addView(row)
+        addButton("Run command") { runCommand(command.text.toString()) }
         addButton("Connect to Worker") { connectBridge() }
         addButton("AI Visible UI Assistant (Android apps)") { submitVisibleUiTask(command.text.toString()) }
         addButton("Approve pending UI plan") {
