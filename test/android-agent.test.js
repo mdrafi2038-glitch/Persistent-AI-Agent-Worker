@@ -27,6 +27,7 @@ test("accepts another normal app package and binds actions to it", () => {
 
 test("rejects system settings, invalid packages, and arbitrary action types", () => {
   assert.throws(() => validateSteps([{ type: "launch_app", packageName: "com.android.settings", explanation: "Open settings" }]), /eligible installed-app/);
+  assert.throws(() => validateSteps([{ type: "launch_app", packageName: "com.google.android.permissioncontroller", explanation: "Open permission UI" }]), /eligible installed-app/);
   assert.throws(() => validateSteps([{ type: "launch_app", packageName: "not a package", explanation: "Open app" }]), /eligible installed-app/);
   assert.throws(() => validateSteps([{ type: "run_shell", command: "id", explanation: "Run command" }]), /Unsupported action/);
 });
