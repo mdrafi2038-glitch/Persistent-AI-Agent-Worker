@@ -68,6 +68,41 @@ test("rejects oversized plans and invalid waits", () => {
   ]), /250 and 10,000/);
 });
 
+
+test("accepts a Facebook feed post only with a matching draft and separate confirmation step", () => {
+  const draft = "আজকের দিনটি নতুন কিছু শেখার সুযোগ।";
+  const steps = validateSteps([
+    { type: "launch_app", packageName: "com.facebook.katana", explanation: "Open Facebook" },
+    { type: "tap_visible_node", text: "What's on your mind?", explanation: "Open the feed composer" },
+    { type: "type_text", text: draft, explanation: "Enter the drafted post" },
+    { type: "wait_for_ui", timeoutMs: 3000, visibleText: "Post", explanation: "Wait for the visible publish control" },
+    { type: "confirm_publish", buttonText: "Post", previewText: draft, explanation: "Ask for a separate final confirmation before publishing" }
+  ], [{ packageName: "com.facebook.katana", label: "Facebook" }]);
+  assert.equal(steps[4].targetPackage, "com.facebook.katana");
+  assert.equal(steps[4].previewText, draft);
+});
+
+test("rejects Facebook publishing without exact draft and matching visible button", () => {
+  const base = [
+    { type: "launch_app", packageName: "com.facebook.katana", explanation: "Open Facebook" },
+    { type: "tap_visible_node", text: "What's on your mind?", explanation: "Open composer" },
+    { type: "type_text", text: "Draft A", explanation: "Enter post draft" },
+    { type: "wait_for_ui", timeoutMs: 3000, visibleText: "Post", explanation: "Wait for publish control" }
+  ];
+  assert.throws(() => validateSteps([...base, { type: "confirm_publish", buttonText: "Post", previewText: "Different draft", explanation: "Confirm post" }]), /exact typed draft/);
+  assert.throws(() => validateSteps([...base.slice(0, 3), { type: "wait_for_ui", timeoutMs: 3000, visibleText: "Cancel", explanation: "Wait for wrong control" }, { type: "confirm_publish", buttonText: "Post", previewText: "Draft A", explanation: "Confirm post" }]), /exact typed draft/);
+  assert.throws(() => validateSteps([
+    { type: "launch_app", packageName: "com.google.android.youtube", explanation: "Open YouTube" },
+    { type: "type_text", text: "Draft A", explanation: "Enter text" },
+    { type: "wait_for_ui", timeoutMs: 3000, visibleText: "Post", explanation: "Wait for control" },
+    { type: "confirm_publish", buttonText: "Post", previewText: "Draft A", explanation: "Confirm post" }
+  ]), /only in the Facebook app/);
+  assert.throws(() => validateSteps([
+    { type: "launch_app", packageName: "com.facebook.katana", explanation: "Open Facebook" },
+    { type: "tap_visible_node", text: "Post", explanation: "Publish without confirmation" }
+  ]), /consequential action/);
+});
+
 test("plan hash is stable regardless of object key order", () => {
   assert.equal(planHash([{ type: "report_state", explanation: "Check", targetPackage: "com.google.android.youtube" }]), planHash([{ targetPackage: "com.google.android.youtube", explanation: "Check", type: "report_state" }]));
 });
