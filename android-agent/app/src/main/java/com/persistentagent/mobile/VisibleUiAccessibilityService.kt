@@ -188,7 +188,7 @@ class VisibleUiAccessibilityService : AccessibilityService() {
 
     companion object {
         private val PACKAGE_PATTERN = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$")
-        private val BLOCKED_PACKAGES = setOf("android", "com.android.settings", "com.google.android.permissioncontroller", "com.android.packageinstaller")
+        private val BLOCKED_PACKAGES = setOf("android", "com.android.settings", "com.android.permissioncontroller", "com.google.android.permissioncontroller", "com.android.packageinstaller", "com.google.android.packageinstaller")
         private val BLOCKED_ACTION_TEXT = Regex("\\b(send|pay|purchase|buy|checkout|delete|remove|publish|post|share|transfer|allow|enable|accept|agree|confirm|continue|install|uninstall|subscribe|submit|log ?out|sign ?out)\\b", RegexOption.IGNORE_CASE)
         private val SENSITIVE_TEXT = Regex("\\b(password|passcode|pin|otp|one.time.password|recovery.code)\\b", RegexOption.IGNORE_CASE)
         @Volatile var instance: VisibleUiAccessibilityService? = null
