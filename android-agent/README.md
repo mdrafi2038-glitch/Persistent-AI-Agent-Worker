@@ -6,7 +6,7 @@ Native Android companion app for the existing Persistent AI Agent Worker.
 - Minimum Android: 10 (API 29); target SDK: 35.
 - Brand-independent design: no OPPO/ColorOS-only onboarding or APIs. Android OEMs may still vary in Accessibility behavior and background limits.
 - AI Chat opens the existing Render web app at `https://persistent-ai-agent-worker.onrender.com`. It uses the Worker login; API keys are not embedded in the APK.
-- Native helpers include local app launch by visible name, Android settings shortcuts, and local reminders. Voice commands remain postponed.
+- Native helpers include local app launch by visible name, Android settings shortcuts, and local reminders. Voice commands remain postponed and the app does not request microphone permission.
 - The optional Accessibility service is inactive until the user enables it. It runs only while an approved task is active and only when the current visible app matches the approved plan.
 - The first run may request notification permission. Exact-alarm and background behavior are governed by Android system settings; the app does not bypass them.
 
