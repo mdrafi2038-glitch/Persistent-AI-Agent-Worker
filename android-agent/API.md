@@ -4,7 +4,7 @@ This is the server-side approval and action-queue foundation for the Worker-owne
 
 ## Setup
 
-1. Apply \`supabase/migrations/20261114060000_android_visible_ui_tasks.sql\` in the Supabase SQL Editor.
+1. Apply \`supabase/migrations/20261114000000_android_agent.sql\` in the Supabase SQL Editor.
 2. Keep \`SUPABASE_URL\` and \`SUPABASE_SERVICE_ROLE_KEY\` configured only on the Render server.
 3. The existing Worker AI provider is used to generate a structured plan. The plan is validated against the allowlist before it can be approved.
 
@@ -15,7 +15,7 @@ If Supabase is not configured, Android task endpoints return HTTP 503 rather tha
 - \`POST /api/android/tasks\` with \`{ "instruction": "..." }\` creates a task and asks the configured AI model for a typed plan.
 - \`GET /api/android/tasks/:id\` fetches plan and progress.
 - \`POST /api/android/tasks/:id/approve\` with the exact \`{ "planHash": "..." }\` approves that plan for ten minutes.
-- \`GET /api/android/tasks/:id/next-action\` returns one action at a time. It redelivers the current in-flight action until acknowledged; the Android client must deduplicate by action ID.
+- \`GET /api/android/tasks/:id/next-action\` returns one action at a time. It redelivers the current in-flight action until acknowledged; the Android client must deduplicate by action ID. A later step is never dispatched while an earlier step is awaiting acknowledgement.
 - \`POST /api/android/tasks/:id/action-result\` with \`{ "actionId": "...", "status": "completed|failed|blocked", "result": "..." }\` acknowledges the dispatched action.
 - \`POST /api/android/tasks/:id/reject\`, \`/pause\`, and \`/cancel\` stop the task.
 - \`GET /api/android/tasks\` and \`GET /api/android/tasks/:id\` show task and action history.
@@ -31,8 +31,8 @@ All responses are marked \`Cache-Control: no-store\`. Unknown actions, arbitrary
 - \`wait_for_ui\`: bounded to 250–10,000 ms.
 - \`report_state\`.
 
-The API does not accept arbitrary gestures, code, shell commands, passwords, PINs, OTPs, payments, purchases, posts, or message sending. The Android app must keep the UI visible, request Accessibility permission explicitly, verify each step, and honor pause/cancel before the next step.
+The API does not accept arbitrary gestures, code, shell commands, passwords, PINs, OTPs, payments, purchases, posts, or message sending. The Worker-owned Android app includes a plan-review dialog and an Accessibility service that is inactive until the user enables it and approves a task. The service is restricted to visible YouTube UI, and typing requires a focused visible search field. It must honor pause/cancel between steps.
 
 ## Current implementation boundary
 
-The server API, SQL migration, AI plan generation, typed-plan validation, and unit tests are included. Native Android Accessibility execution, phone-side approval UI, live progress/history UI, and end-to-end device tests remain future steps.
+The server API, applied SQL migration, AI plan generation, typed-plan validation, Android plan-review dialog, and initial visible-UI Accessibility service are included. The phone app still needs a richer task-history/progress screen, resume UX, and end-to-end testing on a physical device. Current launch allowlist is YouTube only; no result is auto-played.
