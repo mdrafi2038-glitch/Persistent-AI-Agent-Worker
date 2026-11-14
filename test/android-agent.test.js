@@ -71,3 +71,22 @@ test("rejects oversized plans and invalid waits", () => {
 test("plan hash is stable regardless of object key order", () => {
   assert.equal(planHash([{ type: "report_state", explanation: "Check", targetPackage: "com.google.android.youtube" }]), planHash([{ targetPackage: "com.google.android.youtube", explanation: "Check", type: "report_state" }]));
 });
+
+
+test("supports bounded visible scrolling in any approved installed app", () => {
+  const steps = validateSteps([
+    { type: "launch_app", packageName: "com.google.android.apps.maps", explanation: "Open Maps" },
+    { type: "scroll_forward", explanation: "Scroll the visible map results" },
+    { type: "scroll_backward", explanation: "Return to the previous visible section" },
+    { type: "report_state", explanation: "Report the current app state" }
+  ], [{ packageName: "com.google.android.apps.maps", label: "Maps" }]);
+  assert.equal(steps[1].targetPackage, "com.google.android.apps.maps");
+  assert.equal(steps[2].targetPackage, "com.google.android.apps.maps");
+});
+
+test("keeps generic visible UI plans blocked from consequential controls", () => {
+  assert.throws(() => validateSteps([
+    { type: "launch_app", packageName: "com.example.app", explanation: "Open app" },
+    { type: "tap_visible_node", text: "Send", explanation: "Send a message" }
+  ]), /consequential action/);
+});

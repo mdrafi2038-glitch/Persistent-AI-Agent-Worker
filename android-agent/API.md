@@ -28,7 +28,7 @@ All responses are marked `Cache-Control: no-store`. Unknown actions, invalid pac
 - `find_visible_text` / `tap_visible_node`: find an exact, unique visible label in the currently approved app.
 - `type_text`: enter ordinary non-sensitive text (maximum 200 characters) into a focused visible editable field.
 - `press_enter`: submit a focused visible field only when the plan is a user-requested search/query. Android 10 may not expose the required IME action; in that case the step is blocked rather than simulated.
-- `press_back`: navigate back within the approved active app.
+- `press_back`: navigate back within the approved active app.\n- `scroll_forward` / `scroll_backward`: scroll one page in the unique visible scrollable area of the approved app.
 - `wait_for_ui`: bounded to 250–10,000 ms.
 - `report_state`: report whether the approved app is currently active without storing a screen dump.
 

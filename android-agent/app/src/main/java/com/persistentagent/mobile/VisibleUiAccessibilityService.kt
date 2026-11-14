@@ -107,6 +107,15 @@ class VisibleUiAccessibilityService : AccessibilityService() {
                 if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
                 else callback(if (performGlobalAction(GLOBAL_ACTION_BACK)) "completed" else "failed", "Back navigation requested.")
             }
+            "scroll_forward", "scroll_backward" -> {
+                if (!isTargetApp(root, targetPackage)) callback("blocked", "The active app does not match the approved plan.")
+                else {
+                    val direction = if (type == "scroll_forward") AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                    val scrollable = findScrollableNode(root)
+                    val scrolled = scrollable?.performAction(direction) == true
+                    callback(if (scrolled) "completed" else "failed", if (scrolled) "Visible app content scrolled one page." else "No unique visible scrollable area was available.")
+                }
+            }
             "wait_for_ui" -> {
                 val timeout = action.optInt("timeoutMs", 5000).coerceIn(250, 10000)
                 mainHandler.postDelayed({
@@ -164,6 +173,24 @@ class VisibleUiAccessibilityService : AccessibilityService() {
             node = node.parent
         }
         return null
+    }
+
+    private fun findScrollableNode(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (root == null) return null
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var visited = 0
+        var match: AccessibilityNodeInfo? = null
+        while (queue.isNotEmpty() && visited < 350) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isVisibleToUser && node.isEnabled && node.isScrollable) {
+                if (match != null) return null
+                match = node
+            }
+            for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
+        }
+        return match
     }
 
     private fun findEditableNode(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
