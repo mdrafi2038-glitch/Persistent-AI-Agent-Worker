@@ -209,6 +209,10 @@ function registerAndroidAgent({ app, supabase, requireAuth }) {
         await supabase.from("android_agent_tasks").update({ status: "approval_expired", updated_at: new Date().toISOString() }).eq("id", task.id).eq("status", "approved");
         return res.status(410).json({ error: "Approval expired. Review and approve the plan again." });
       }
+      const { data: inFlight, error: inFlightError } = await supabase.from("android_agent_actions")
+        .select("id").eq("task_id", task.id).eq("status", "dispatched").limit(1);
+      if (inFlightError) throw inFlightError;
+      if (inFlight?.length) return res.json({ action: null, status: "waiting_for_current_action_result" });
       const { data: queued, error } = await supabase.from("android_agent_actions")
         .select("id,step_index,action_type,payload")
         .eq("task_id", task.id).eq("status", "queued")
