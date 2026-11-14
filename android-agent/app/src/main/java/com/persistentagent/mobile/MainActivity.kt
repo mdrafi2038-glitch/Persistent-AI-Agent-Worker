@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
                     }
                     val lines = (0 until plan.length()).mapNotNull { index ->
                         val step = plan.optJSONObject(index) ?: return@mapNotNull null
-                        "\${index + 1}. \${step.optString("explanation")} (\${step.optString("type")})"
+                        "${index + 1}. ${step.optString("explanation")} (${step.optString("type")})"
                     }
                     AlertDialog.Builder(this)
                         .setTitle("Review Android action plan")
