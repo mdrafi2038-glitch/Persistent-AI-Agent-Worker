@@ -16,7 +16,7 @@ GitHub Actions workflow `.github/workflows/android-apk.yml` builds a debug APK o
 
 ## Visible UI task API foundation
 
-The Worker now exposes authenticated task planning and approval routes under \`/api/android/tasks\`. See \`android-agent/API.md\` for the request/response lifecycle and \`supabase/migrations/20261114060000_android_visible_ui_tasks.sql\` for the database migration.
+The Worker now exposes authenticated task planning and approval routes under \`/api/android/tasks\`. See \`android-agent/API.md\` for the request/response lifecycle and \`supabase/migrations/20261114000000_android_agent.sql\` for the database migration.
 
 The current API supports only a strict typed action allowlist and the YouTube package for app launch. Each plan requires explicit approval and expires after ten minutes. Actions are dispatched one at a time and require an acknowledgement. No device registration, browser automation, PC bridge, arbitrary shell, or hidden interaction is included.
 
