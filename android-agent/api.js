@@ -311,18 +311,23 @@ function registerAndroidAgent({ app, supabase, requireAuth, generatePlan }) {
   app.post(base + "/:id/pause", async (req, res) => {
     if (!requireDb(res)) return;
     try {
+      const task = await getTask(req.params.id);
+      if (!task || task.status !== "approved") return res.status(409).json({ error: "Only an approved task can be paused." });
+      const { data: inFlight, error: inFlightError } = await supabase.from("android_agent_actions")
+        .select("id").eq("task_id", task.id).eq("status", "dispatched").limit(1);
+      if (inFlightError) throw inFlightError;
+      if (inFlight?.length) return res.status(409).json({ error: "Wait for the current UI step to finish, then pause between steps." });
       const { data, error } = await supabase.from("android_agent_tasks")
         .update({ status: "paused", updated_at: new Date().toISOString() })
         .eq("id", req.params.id).eq("status", "approved").select("id,status").maybeSingle();
       if (error) throw error;
-      if (!data) return res.status(409).json({ error: "Only an approved task can be paused." });
+      if (!data) return res.status(409).json({ error: "Task state changed. Refresh and try again." });
       return res.json({ task: data });
     } catch (error) {
       console.error("android task pause error:", error.message);
       return res.status(500).json({ error: "Could not pause Android task." });
     }
   });
-
   app.post(base + "/:id/resume", async (req, res) => {
     if (!requireDb(res)) return;
     try {
